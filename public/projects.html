@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>项目信息 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html">预研</a>
+        <a data-menu="page:selection" href="selection.html">选型</a>
+        <a data-menu="page:audits" href="audits.html">稽核</a>
+        <a data-menu="page:projects" href="projects.html" class="active">项目信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>项目信息</h1>
+          <div class="desc">项目信息的录入、管理与分析展示</div>
+        </div>
+      </div>
+
+      <!-- 子界面 Tab 切换 -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="manage">一、BOM信息</button>
+        <button class="sub-tab" data-tab="analysis">二、分析看板</button>
+      </div>
+
+      <!-- 子界面一：信息管理 -->
+      <section class="sub-panel active" id="panel-manage">
+        <!-- 项目信息列表 -->
+        <div class="card">
+          <div class="card-title">
+            <span>项目信息列表</span>
+            <div>
+              <button class="btn" onclick="openProjectImportModal()" data-permission="action:import">📥 批量导入</button>
+              <button class="btn" onclick="exportProjects()" data-permission="action:export">📤 批量导出</button>
+              <button class="btn btn-danger" onclick="batchDeleteProjects()" data-permission="action:delete">🗑 批量删除</button>
+              <button class="btn btn-primary" onclick="openProjectModal()" data-permission="action:create">＋ 新建项目信息</button>
+            </div>
+          </div>
+          <div class="toolbar">
+            <input type="text" id="pKeyword" class="search-input" placeholder="搜索项目名称 / 基线 / MOD料号 / panel / IC / 背光厂...">
+            <button class="btn" onclick="loadProjects(1)">查询</button>
+            <button class="btn" onclick="resetProjects()">重置</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="projectTable">
+              <thead id="projectHead"></thead>
+              <tbody id="projectBody"></tbody>
+            </table>
+            <div class="empty" id="projectEmpty" style="display:none">
+              <div class="big">🗂️</div>
+              <div>暂无项目信息，点击「新建项目信息」手动录入</div>
+            </div>
+            <div class="toolbar" id="projectPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 子界面二：分析展示 -->
+      <section class="sub-panel" id="panel-analysis">
+        <div class="stat-grid">
+          <div class="stat-card accent-blue">
+            <div class="label">项目总数</div>
+            <div class="value" id="st_total">0</div>
+            <div class="hint">全部项目信息</div>
+          </div>
+          <div class="stat-card accent-green">
+            <div class="label">供应商数</div>
+            <div class="value" id="st_suppliers">0</div>
+            <div class="hint">已关联的供应商</div>
+          </div>
+          <div class="stat-card accent-amber">
+            <div class="label">品类数</div>
+            <div class="value" id="st_categories">0</div>
+            <div class="hint">已覆盖的物料品类</div>
+          </div>
+          <div class="stat-card accent-red">
+            <div class="label">流程填写率</div>
+            <div class="value" id="st_flow">0%</div>
+            <div class="hint">已填写流程的项目占比</div>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="card">
+            <div class="card-title">按供应商分布</div>
+            <div class="bar-list" id="barSuppliers"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">按品类分布</div>
+            <div class="bar-list" id="barCategories"></div>
+          </div>
+          <div class="card chart-wide">
+            <div class="card-title">最近录入的项目</div>
+            <div id="recentProjects"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px">
+          <div class="card-title">预研专项分析</div>
+          <div class="stat-grid">
+            <div class="stat-card accent-blue"><div class="label">专项总数</div><div class="value" id="ps_st_total">0</div><div class="hint">全部预研专项</div></div>
+            <div class="stat-card accent-green"><div class="label">进行中</div><div class="value" id="ps_st_doing">0</div><div class="hint">正在推进</div></div>
+            <div class="stat-card accent-amber"><div class="label">已完成</div><div class="value" id="ps_st_done">0</div><div class="hint">已结项</div></div>
+            <div class="stat-card accent-red"><div class="label">暂停/搁置</div><div class="value" id="ps_st_paused">0</div><div class="hint">暂停或风险状态</div></div>
+          </div>
+          <div class="chart-grid">
+            <div class="card"><div class="card-title">按品类</div><div class="bar-list" id="ps_barCategory"></div></div>
+            <div class="card"><div class="card-title">按状态</div><div class="bar-list" id="ps_barStatus"></div></div>
+            <div class="card"><div class="card-title">按进度</div><div class="bar-list" id="ps_barProgress"></div></div>
+            <div class="card"><div class="card-title">按责任人</div><div class="bar-list" id="ps_barOwner"></div></div>
+          </div>
+          <div class="table-wrap" style="margin-top:16px">
+            <table class="data-table">
+              <thead>
+                <tr><th>序号</th><th>品类</th><th>专项名称</th><th>立项</th><th>P1</th><th>P2</th><th>P3</th><th>状态</th><th>责任人</th></tr>
+              </thead>
+              <tbody id="ps_recentBody"></tbody>
+            </table>
+            <div class="empty" id="ps_recentEmpty" style="display:none">
+              <div class="big">🔬</div>
+              <div>暂无预研专项数据</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 批量导入项目信息弹窗 -->
+  <div class="modal-mask" id="projectImportModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3>批量导入项目信息</h3>
+        <button class="modal-close" onclick="closeModal('projectImportModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="import-tip">
+          支持 .xlsx / .xls / .csv 文件。第一行为表头，需包含
+          <b>项目名称</b>（必填），其余列名可参考模板：
+          基线、量产封样时间、项目尺寸、MOD厂、MOD料号、panel、IC、CG厂、CG材质、
+          FPC、OCA、POL、COG-ACF、FOG-ACF、元器件包封胶、一线胶、面胶、银浆、硅酮胶、
+          盲孔一道胶、盲孔二道胶、背光厂、遮光胶、上/下增光、扩散、LED灯胶、反射、LED、LGP、胶框、铁框。
+        </div>
+        <div class="toolbar">
+          <input type="file" id="pImportFile" accept=".xlsx,.xls,.csv" class="search-input" style="flex:1; min-width:220px;">
+          <button class="btn" onclick="downloadProjectImportTemplate()">⬇ 下载模板</button>
+          <button class="btn btn-primary" onclick="parseProjectImportExcel()">解析预览</button>
+        </div>
+        <div id="pImportResult"></div>
+        <div class="table-wrap" id="pImportPreviewWrap" style="display:none; max-height:320px; overflow:auto;">
+          <table class="data-table">
+            <thead id="pImportPreviewHead"></thead>
+            <tbody id="pImportPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('projectImportModal')">取消</button>
+        <button class="btn btn-primary" id="btnConfirmPImport" onclick="confirmProjectImport()" disabled>确认导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建/编辑项目信息弹窗 -->
+  <div class="modal-mask" id="projectModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3 id="projectModalTitle">新建项目信息</h3>
+        <button class="modal-close" onclick="closeModal('projectModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item full">
+          <label>项目名称<span class="req">*</span></label>
+          <input id="f_project_name" placeholder="必填">
+        </div>
+        <div class="form-item half">
+          <label>供应商</label>
+          <input id="f_supplier" list="pSupList" placeholder="供应商名称">
+          <datalist id="pSupList"></datalist>
+        </div>
+        <div class="form-item half">
+          <label>品类</label>
+          <select id="f_category">
+            <option value="">请选择（品类管理中类）</option>
+          </select>
+        </div>
+        <div class="form-item full">
+          <label>流程</label>
+          <textarea id="f_flow" placeholder="每行一个步骤，将自动转为 步骤A → 步骤B"></textarea>
+        </div>
+      </div>
+      <div id="specFields"></div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('projectModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveProject()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/projects.js"></script>
+  <script src="js/projects-prestudy.js"></script>
+</body>
+</html>

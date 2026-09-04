@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>看板 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html">预研</a>
+        <a data-menu="page:selection" href="selection.html">选型</a>
+        <a data-menu="page:audits" href="audits.html">稽核</a>
+        <a data-menu="page:projects" href="projects.html">项目信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>看板</h1>
+          <div class="desc">物料库整体情况、认证进度与到期预警</div>
+        </div>
+        <button class="btn" onclick="loadStats()">🔄 刷新</button>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card accent-blue">
+          <div class="label">物料总数</div>
+          <div class="value" id="statTotal">-</div>
+          <div class="hint">已入库物料合计</div>
+        </div>
+        <div class="stat-card accent-green">
+          <div class="label">绿区</div>
+          <div class="value" id="statCert">-</div>
+          <div class="hint">认证有效期内</div>
+        </div>
+        <div class="stat-card accent-amber">
+          <div class="label">黄区</div>
+          <div class="value" id="statProgress">-</div>
+          <div class="hint">认证流程中 / 需关注</div>
+        </div>
+        <div class="stat-card accent-red">
+          <div class="label">红区</div>
+          <div class="value" id="statExpired">-</div>
+          <div class="hint">已过期 / 失效 / 淘汰</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">90天内到期</div>
+          <div class="value" id="statExpiring">-</div>
+          <div class="hint">需安排重新认证</div>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="card">
+          <div class="card-title">认证状态分布</div>
+          <div class="chart-box" id="chartStatus"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">物料分类分布</div>
+          <div class="chart-box" id="chartCategory"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">供应商 TOP10</div>
+          <div class="chart-box" id="chartSupplier"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">认证资料覆盖率</div>
+          <div class="chart-box" id="chartDocs"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚠️ 认证到期预警</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+          <div>
+            <div style="font-weight:600; color:var(--danger); margin-bottom:6px;">已过期（需尽快处理）</div>
+            <ul class="alert-list" id="expiredList"></ul>
+          </div>
+          <div>
+            <div style="font-weight:600; color:var(--warning); margin-bottom:6px;">90天内到期</div>
+            <ul class="alert-list" id="expiringList"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">最近新增物料</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>编码</th><th>物料名称</th><th>型号</th><th>状态</th><th>申请人</th><th>录入时间</th></tr>
+            </thead>
+            <tbody id="recentBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>稽核 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html">预研</a>
+        <a data-menu="page:selection" href="selection.html">选型</a>
+        <a data-menu="page:audits" href="audits.html" class="active">稽核</a>
+        <a data-menu="page:projects" href="projects.html">项目信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>稽核</h1>
+          <div class="desc">供应商稽核记录：计划、执行结果、得分与整改跟踪</div>
+        </div>
+      </div>
+
+      <!-- 子界面 Tab -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="audits">📋 一、稽核</button>
+        <button class="sub-tab" data-tab="dashboard">📊 二、分析看板</button>
+      </div>
+
+      <!-- 稽核记录 -->
+      <section class="sub-panel active" id="panel-audits">
+      <div class="stat-grid">
+        <div class="stat-card accent-blue"><div class="label">稽核总数</div><div class="value" id="st_total">0</div><div class="hint">全部稽核记录</div></div>
+        <div class="stat-card accent-green"><div class="label">合格</div><div class="value" id="st_pass">0</div><div class="hint">已判定合格</div></div>
+        <div class="stat-card accent-red"><div class="label">不合格</div><div class="value" id="st_fail">0</div><div class="hint">需重点跟进</div></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin:0 0 12px;">
+          <button class="btn" onclick="openBatchImportModal()" data-permission="action:import">📥 批量导入</button>
+          <button class="btn" onclick="exportBatchData()" data-permission="action:export">📤 批量导出</button>
+          <button class="btn btn-danger" onclick="batchDeleteAudits()" data-permission="action:delete">🗑 批量删除</button>
+          <button class="btn btn-primary" onclick="openAuditModal()" data-permission="action:create">＋ 新增稽核</button>
+        </div>
+        <div class="toolbar">
+          <select id="filterMaterialType">
+            <option value="">全部物料品类</option>
+          </select>
+          <input type="text" id="keyword" class="search-input" placeholder="搜索供应商 / 稽核人员 / 内容...">
+          <select id="filterResult">
+            <option value="">全部结果</option>
+            <option value="合格">合格</option>
+            <option value="有条件合格">有条件合格</option>
+            <option value="不合格">不合格</option>
+          </select>
+          <button class="btn" onclick="loadAudits(1)">查询</button>
+          <button class="btn" onclick="resetAudits()">重置</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="auditTable">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="auditCheckAll" onclick="toggleAuditAll(this)" title="全选本页"></th>
+                <th>物料品类</th>
+                <th>时间</th>
+                <th>供应商</th>
+                <th>稽核内容</th>
+                <th>稽核结果</th>
+                <th>稽核人员</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="auditBody"></tbody>
+          </table>
+          <div class="empty" id="emptyBox" style="display:none">
+            <div class="big">🔎</div>
+            <div>暂无稽核记录，点击上方「新增稽核」开始录入</div>
+          </div>
+          <div class="toolbar" id="auditPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
+        </div>
+      </div>
+
+      </section>
+
+      <!-- 稽核看板 -->
+      <section class="sub-panel" id="panel-dashboard">
+      <div class="card">
+        <div class="card-title">稽核看板</div>
+        <div class="chart-grid">
+          <div class="card">
+            <div class="card-title">供应商稽核次数</div>
+            <div class="bar-list" id="barSupplier"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">问题个数</div>
+            <div class="bar-list" id="barIssues"></div>
+          </div>
+          <div class="card chart-wide">
+            <div class="card-title">稽核结果分布</div>
+            <div class="bar-list" id="barResult"></div>
+          </div>
+          <div class="card chart-wide">
+            <div class="card-title">问题个数年度趋势</div>
+            <div id="trendChart"></div>
+          </div>
+        </div>
+      </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 新增/编辑弹窗 -->
+  <div class="modal-mask" id="auditModal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增稽核</h3>
+        <button class="modal-close" onclick="closeModal('auditModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item half">
+          <label>物料品类<span class="req">*</span></label>
+          <select id="f_material_type">
+            <option value="">请选择</option>
+          </select>
+        </div>
+        <div class="form-item half">
+          <label>时间</label>
+          <input type="date" id="f_audit_date">
+        </div>
+        <div class="form-item half">
+          <label>供应商<span class="req">*</span></label>
+          <input id="f_supplier" list="supList" placeholder="必填">
+          <datalist id="supList"></datalist>
+        </div>
+        <div class="form-item half">
+          <label>稽核人员</label>
+          <input id="f_auditor" placeholder="稽核负责人">
+        </div>
+        <div class="form-item full">
+          <label>稽核内容</label>
+          <textarea id="f_scope" placeholder="如：质量管理体系 / 生产过程稽核 / 来料检验"></textarea>
+        </div>
+        <div class="form-item half">
+          <label>稽核结果</label>
+          <select id="f_result">
+            <option value="合格">合格</option>
+            <option value="有条件合格">有条件合格</option>
+            <option value="不合格">不合格</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('auditModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveAudit()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/audits.js"></script>
+</body>
+</html>

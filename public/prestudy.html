@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>预研 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html" class="active">预研</a>
+        <a data-menu="page:selection" href="selection.html">选型</a>
+        <a data-menu="page:audits" href="audits.html">稽核</a>
+        <a data-menu="page:projects" href="projects.html">项目信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>预研</h1>
+          <div class="desc">预研专项的录入、AI 信息提取与展示管理</div>
+        </div>
+      </div>
+
+      <!-- 子界面 Tab -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="list">📋 一、预研专项列表</button>
+        <button class="sub-tab" data-tab="dashboard">📊 二、分析看板</button>
+      </div>
+
+      <!-- 预研专项列表 -->
+      <section class="sub-panel active" id="panel-list">
+
+      <div class="card">
+          <div class="card-title">
+            <button class="btn" onclick="openBatchImportModal()" data-permission="action:import">📥 批量导入</button>
+            <button class="btn" onclick="exportBatchData()" data-permission="action:export">📤 批量导出</button>
+            <button class="btn btn-danger" onclick="batchDeletePrestudies()" data-permission="action:delete">🗑 批量删除</button>
+            <button class="btn btn-primary" onclick="openPrestudyModal()" data-permission="action:create">＋ 新增专项</button>
+          </div>
+          <div class="toolbar">
+            <input type="text" id="pKeyword" class="search-input" placeholder="搜索物料品类 / 专项名称 / 风险 / 立项 / P1 / P2 / P3 / 状态 / 责任人">
+            <button class="btn" onclick="loadPrestudies(1)">查询</button>
+            <button class="btn" onclick="resetPrestudies()">重置</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="preCheckAll" onclick="togglePreAll(this)" title="全选本页"></th>
+                  <th>序号</th>
+                  <th>物料品类</th>
+                  <th>专项名称</th>
+                  <th>立项</th>
+                  <th>P1</th>
+                  <th>P2</th>
+                  <th>P3</th>
+                  <th>风险</th>
+                  <th>状态</th>
+                  <th>责任人</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="prestudyBody"></tbody>
+            </table>
+            <div class="empty" id="prestudyEmpty" style="display:none">
+              <div class="big">🔬</div>
+              <div>暂无预研专项，点击「新增专项」手动录入</div>
+            </div>
+            <div class="toolbar" id="prestudyPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
+          </div>
+      </div>
+      </section>
+
+      <!-- 看板 -->
+      <section class="sub-panel" id="panel-dashboard">
+        <div class="stat-grid">
+          <div class="stat-card accent-blue"><div class="label">专项总数</div><div class="value" id="st_total">0</div><div class="hint">全部预研专项</div></div>
+          <div class="stat-card accent-green"><div class="label">进行中</div><div class="value" id="st_doing">0</div><div class="hint">正在推进</div></div>
+          <div class="stat-card accent-amber"><div class="label">已完成</div><div class="value" id="st_done">0</div><div class="hint">已结项</div></div>
+          <div class="stat-card accent-red"><div class="label">暂停/搁置</div><div class="value" id="st_paused">0</div><div class="hint">暂停或风险状态</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">专项分析</div>
+          <div class="chart-grid">
+            <div class="card"><div class="card-title">按物料品类</div><div class="bar-list" id="barCategory"></div></div>
+            <div class="card"><div class="card-title">按状态</div><div class="bar-list" id="barStatus"></div></div>
+            <div class="card"><div class="card-title">按进度</div><div class="bar-list" id="barProgress"></div></div>
+            <div class="card"><div class="card-title">按责任人</div><div class="bar-list" id="barOwner"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">最近专项</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>序号</th><th>物料品类</th><th>专项名称</th><th>立项</th><th>P1</th><th>P2</th><th>P3</th><th>状态</th><th>责任人</th></tr>
+              </thead>
+              <tbody id="recentBody"></tbody>
+            </table>
+            <div class="empty" id="recentEmpty" style="display:none">
+              <div class="big">🔬</div>
+              <div>暂无预研专项数据</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 新增/编辑弹窗 -->
+  <div class="modal-mask" id="prestudyModal">
+    <div class="modal" style="max-width:720px">
+      <div class="modal-head">
+        <div class="modal-title" id="prestudyModalTitle">新增预研专项</div>
+        <button class="modal-close" onclick="closePrestudyModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-item half">
+            <label>物料品类<span class="req">*</span></label>
+            <select id="f_category">
+              <option value="">请选择</option>
+            </select>
+          </div>
+          <div class="form-item half">
+            <label>专项名称<span class="req">*</span></label>
+            <input id="f_topic" placeholder="专项名称">
+          </div>
+          <div class="form-item full">
+            <label>风险</label>
+            <textarea id="f_risk" placeholder="风险描述"></textarea>
+          </div>
+          <div class="form-item half">
+            <label>立项</label>
+            <input id="f_milestone_lx" placeholder="如：26/7/30">
+          </div>
+          <div class="form-item half">
+            <label>P1</label>
+            <input id="f_milestone_p1" placeholder="如：26/11/6 装机">
+          </div>
+          <div class="form-item half">
+            <label>P2</label>
+            <input id="f_milestone_p2" placeholder="如：26/12/28 装机">
+          </div>
+          <div class="form-item half">
+            <label>P3</label>
+            <input id="f_milestone_p3" placeholder="如：27/1/23 装机">
+          </div>
+          <div class="form-item half">
+            <label>状态</label>
+            <input id="f_status" placeholder="如：进行中 / 已完成 / 暂停">
+          </div>
+          <div class="form-item full">
+            <label>责任人</label>
+            <input id="f_owner" placeholder="责任人姓名">
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closePrestudyModal()">取消</button>
+        <button class="btn btn-primary" onclick="savePrestudy()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/prestudy.js"></script>
+</body>
+</html>

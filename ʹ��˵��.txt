@@ -1,0 +1,46 @@
+物料开发认证管理系统 —— 本地绿色版
+=====================================
+
+【运行】
+  双击「启动系统.bat」即可自动启动并打开浏览器（http://localhost:3000）
+  如需停止，双击「停止系统.bat」或关闭弹出的黑色命令行窗口
+
+【系统要求】
+  Windows 7 及以上，无需安装 Node.js（已内置 node.exe）
+
+【功能页面】
+  物料汇总表       http://localhost:3000/         物料台账录入、查询、认证状态管理
+  选型查重         http://localhost:3000/selection.html
+  项目信息         http://localhost:3000/projects.html   BOM 信息 + AI 自动提取
+  供应商信息       http://localhost:3000/suppliers.html
+  预研专项         http://localhost:3000/prestudy.html
+  稽核记录         http://localhost:3000/audits.html
+  关键工艺 QCP     http://localhost:3000/qcps.html       工序管控 + 分析看板
+
+【AI 自动提取（可选功能）】
+  「项目信息-一、BOM信息」支持上传 BOM 文档，由 AI 自动提取供应商、品类、
+  项目名称及各物料规格字段。
+  启用方法：用记事本打开 .env 文件，把 AI_API_KEY= 后面填入你申请的
+  API Key 后保存，重启系统即可（默认已配好 DeepSeek 参数，可自行更换其他服务商）。
+  不配置也不影响使用，系统会自动用规则提取兜底。
+
+【目录说明】
+  node.exe       内置的 Node.js 运行时
+  server.js      服务主程序
+  db.js          数据库初始化
+  public/        前端页面
+  data/          SQLite 数据库文件（数据保存在此，勿删除）
+  uploads/       附件上传目录
+  .env           AI 配置（可选）
+  node_modules/  依赖库
+
+【数据备份与迁移】
+  直接复制 data\materials.db 即可备份全部数据。
+  换电脑使用时，把整个文件夹拷贝过去即可，数据自动随迁。
+
+【演示数据（可选）】
+  新安装为空白系统。如需查看演示效果，可在命令行执行：node seed-demo.js
+
+【默认端口】
+  3000。若被占用会自动打开已运行的页面；
+  如需修改端口，在 .env 中新增一行 PORT=8080 后重启。

@@ -1,0 +1,34 @@
+# 依赖与运行时
+node_modules/
+node.exe
+
+# 环境变量与密钥
+.env
+*.local
+
+# IDE / 工具配置
+.codebuddy/
+.playwright-cli/
+.idea/
+.vscode/
+*.swp
+
+# 数据库与用户数据（演示数据可用 seed-demo.js 重新生成）
+data/
+uploads/
+
+# 调试与预览临时文件
+_check_ports.ps1
+_inspect_tcb.js
+_pkg_tmp.zip
+_ports_dump.txt
+_preview_err.log
+_preview_out.log
+_start_preview.js
+_restart.bat
+
+# 日志与系统文件
+*.log
+Thumbs.db
+Desktop.ini
+.DS_Store

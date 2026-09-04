@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>选型 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html">预研</a>
+        <a data-menu="page:selection" href="selection.html" class="active">选型</a>
+        <a data-menu="page:audits" href="audits.html">稽核</a>
+        <a data-menu="page:projects" href="projects.html">项目信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>选型</h1>
+          <div class="desc">物料汇总、选型查重与整体看板</div>
+        </div>
+      </div>
+
+      <!-- 子界面 Tab -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="materials">📋 一、物料汇总表</button>
+        <button class="sub-tab" data-tab="candidates">🏭 二、供应商选型</button>
+        <button class="sub-tab" data-tab="board">📊 三、分析看板</button>
+      </div>
+
+      <!-- 子界面一：物料汇总表 -->
+      <section class="sub-panel active" id="panel-materials">
+        <div class="card">
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin:0 0 12px;">
+            <button class="btn" onclick="openImportModal()" data-permission="action:import">📥 批量导入</button>
+            <button class="btn" onclick="exportMaterials()" data-permission="action:export">📤 Excel 导出</button>
+            <button class="btn btn-danger" onclick="batchDeleteMaterials()" data-permission="action:delete">🗑 批量删除</button>
+            <button class="btn btn-primary" onclick="openAdd()" data-permission="action:create">＋ 新增物料</button>
+          </div>
+          <div class="toolbar">
+            <input type="text" id="keyword" class="search-input" placeholder="搜索编码 / 物料品类 / 型号 / 供应商...">
+            <select id="filterCategory"><option value="">全部分类</option></select>
+            <select id="filterStatus"><option value="">全部状态</option></select>
+            <select id="filterSupplier"><option value="">全部供应商</option></select>
+            <button class="btn" onclick="applyFilters()">查询</button>
+            <button class="btn" onclick="resetFilters()">重置</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="materialTable">
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="selMatCheckAll" onclick="toggleSelMatAll(this)" title="全选本页"></th>
+                  <th>编码</th>
+                  <th>物料品类</th>
+                  <th>型号规格</th>
+                  <th>分类</th>
+                  <th>供应商</th>
+                  <th>认证状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+            <div class="empty" id="emptyBox" style="display:none">
+              <div class="big">📭</div>
+              <div>暂无物料数据，点击上方「新增物料」开始录入</div>
+            </div>
+          </div>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </section>
+
+      <!-- 子界面：供应商选型 -->
+      <section class="sub-panel" id="panel-candidates">
+        <div class="card">
+          <div class="card-title">供应商选型</div>
+          <div class="toolbar">
+            <input type="text" id="csKeyword" class="search-input" placeholder="搜索候选供应商名称...">
+            <select id="csCategory"><option value="">全部物料品类</option></select>
+            <select id="csStatus"><option value="">全部状态</option></select>
+            <button class="btn" onclick="applyCandidateFilters()">查询</button>
+            <button class="btn" onclick="resetCandidateFilters()">重置</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="candidateTable">
+              <thead>
+                <tr>
+                  <th>候选供应商名称</th>
+                  <th>物料品类</th>
+                  <th>状态</th>
+                  <th>工厂地址</th>
+                  <th>产品类型</th>
+                </tr>
+              </thead>
+              <tbody id="candidateBody"></tbody>
+            </table>
+            <div class="empty" id="candidateEmpty" style="display:none">
+              <div class="big">🏭</div>
+              <div>暂无候选供应商，请先到「供应商信息」页面录入</div>
+            </div>
+          </div>
+          <div class="pagination" id="candidatePager"></div>
+        </div>
+      </section>
+
+      <!-- 子界面三：看板 -->
+      <section class="sub-panel" id="panel-board">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+          <button class="btn" onclick="refreshBoard()">🔄 刷新</button>
+        </div>
+
+        <!-- 一、物料看板 -->
+        <div class="board-section">
+          <div class="board-section-title">一、物料看板</div>
+          <div class="stat-grid">
+            <div class="stat-card accent-blue">
+              <div class="label">物料总数</div>
+              <div class="value" id="statTotal">-</div>
+              <div class="hint">已入库物料合计</div>
+            </div>
+            <div class="stat-card accent-green">
+              <div class="label">绿区</div>
+              <div class="value" id="statCert">-</div>
+              <div class="hint">认证有效期内</div>
+            </div>
+            <div class="stat-card accent-amber">
+              <div class="label">黄区</div>
+              <div class="value" id="statProgress">-</div>
+              <div class="hint">认证流程中 / 需关注</div>
+            </div>
+            <div class="stat-card accent-red">
+              <div class="label">红区</div>
+              <div class="value" id="statExpired">-</div>
+              <div class="hint">已过期 / 失效 / 淘汰</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">90天内到期</div>
+              <div class="value" id="statExpiring">-</div>
+              <div class="hint">需安排重新认证</div>
+            </div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="card">
+              <div class="card-title">认证状态分布</div>
+              <div class="chart-box" id="chartStatus"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">物料分类分布</div>
+              <div class="chart-box" id="chartCategory"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">供应商 TOP10</div>
+              <div class="chart-box" id="chartSupplier"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">最近新增物料</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>编码</th><th>物料品类</th><th>型号</th><th>状态</th><th>申请人</th><th>录入时间</th></tr>
+                </thead>
+                <tbody id="recentBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 二、供应商看板 -->
+        <div class="board-section">
+          <div class="board-section-title">二、供应商看板</div>
+          <div class="stat-grid">
+            <div class="stat-card accent-blue">
+              <div class="label">供应商总数</div>
+              <div class="value" id="supTotal">-</div>
+              <div class="hint">已录入供应商合计</div>
+            </div>
+            <div class="stat-card accent-green">
+              <div class="label">合作中</div>
+              <div class="value" id="supActive">-</div>
+              <div class="hint">当前合作供应商</div>
+            </div>
+            <div class="stat-card accent-amber">
+              <div class="label">暂停</div>
+              <div class="value" id="supPaused">-</div>
+              <div class="hint">合作暂停中</div>
+            </div>
+            <div class="stat-card accent-red">
+              <div class="label">淘汰</div>
+              <div class="value" id="supDead">-</div>
+              <div class="hint">已淘汰供应商</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">物料品类数</div>
+              <div class="value" id="supCategoryCount">-</div>
+              <div class="hint">覆盖的物料品类</div>
+            </div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="card">
+              <div class="card-title">供应商状态分布</div>
+              <div class="chart-box" id="chartSupStatus"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">供应商物料品类分布</div>
+              <div class="chart-box" id="chartSupCategory"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">供应商列表</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>供应商名称</th><th>物料品类</th><th>状态</th><th>工厂地址</th><th>产品类型</th></tr>
+                </thead>
+                <tbody id="supBoardBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 新增/编辑物料弹窗 -->
+  <div class="modal-mask" id="editModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增物料</h3>
+        <button class="modal-close" onclick="closeModal('editModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item half">
+          <label>物料品类<span class="req">*</span></label>
+          <input id="f_name" placeholder="必填">
+        </div>
+        <div class="form-item half">
+          <label>供应商</label>
+          <input id="f_supplier" list="supList" placeholder="供应商名称">
+          <datalist id="supList"></datalist>
+        </div>
+        <div class="form-item half">
+          <label>规格型号</label>
+          <input id="f_model" placeholder="如：0805-10K-1%">
+        </div>
+        <div class="form-item half">
+          <label>认证状态</label>
+          <select id="f_status"></select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('editModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveMaterial()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量导入弹窗 -->
+  <div class="modal-mask" id="importModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3>批量导入物料</h3>
+        <button class="modal-close" onclick="closeModal('importModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="import-tip">
+          支持 .xlsx / .xls / .csv 文件。第一行为表头，需包含：
+          <b>物料品类</b>（必填）、编码、型号规格、分类、供应商、制造商、认证状态。
+          编码留空时自动生成，认证状态仅识别：绿区 / 黄区 / 红区。
+        </div>
+        <div class="toolbar">
+          <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="search-input" style="flex:1; min-width:220px;">
+          <button class="btn" onclick="downloadImportTemplate()">⬇ 下载模板</button>
+          <button class="btn btn-primary" onclick="parseImportExcel()">解析预览</button>
+        </div>
+        <div id="importResult"></div>
+        <div class="table-wrap" id="importPreviewWrap" style="display:none; max-height:320px; overflow:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th><th>编码</th><th>物料品类</th><th>型号规格</th>
+                <th>分类</th><th>供应商</th><th>制造商</th><th>认证状态</th>
+              </tr>
+            </thead>
+            <tbody id="importPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('importModal')">取消</button>
+        <button class="btn btn-primary" id="btnConfirmImport" onclick="confirmImport()" disabled>确认导入</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/selection.js"></script>
+</body>
+</html>

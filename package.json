@@ -1,0 +1,19 @@
+{
+  "name": "material-cert-manager",
+  "version": "1.0.0",
+  "description": "物料开发认证管理系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.19.0",
+    "mammoth": "^1.12.1",
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
+  }
+}
