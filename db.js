@@ -157,6 +157,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS prestudies (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     category   TEXT DEFAULT '',
+    supplier   TEXT DEFAULT '',
     topic      TEXT NOT NULL,
     risk       TEXT DEFAULT '',
     progress   TEXT DEFAULT '',
@@ -166,6 +167,7 @@ db.exec(`
     milestone_p3 TEXT DEFAULT '',
     status     TEXT DEFAULT '',
     owner      TEXT DEFAULT '',
+    kind       TEXT DEFAULT '',
     source     TEXT DEFAULT '手动',
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT DEFAULT (datetime('now', 'localtime'))
@@ -269,13 +271,20 @@ const SUPPLIER_FIELDS = [
   }
 })();
 
-// 老库迁移：为 prestudies 表补充里程碑字段列（立项/P1/P2/P3）
+// 老库迁移：为 prestudies 表补充供应商、里程碑字段列（供应商/立项/P1/P2/P3）与归属清单 kind
 (function migratePrestudies() {
   const existing = new Set(db.prepare('PRAGMA table_info(prestudies)').all().map((c) => c.name));
-  for (const field of ['milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3']) {
+  for (const field of ['supplier', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3']) {
     if (!existing.has(field)) {
       db.exec(`ALTER TABLE prestudies ADD COLUMN ${field} TEXT DEFAULT ''`);
     }
+  }
+  // kind：记录归属清单（'' = 预研专项；'research' = 在研项目风险清单）。
+  // 升级前两清单混在一张表里，且存量记录均为「一、在研项目」的风险点，
+  // 因此首次加列时把已有记录统一归到在研项目，避免它们继续出现在「二、预研专项」。
+  if (!existing.has('kind')) {
+    db.exec("ALTER TABLE prestudies ADD COLUMN kind TEXT DEFAULT ''");
+    db.exec("UPDATE prestudies SET kind = 'research'");
   }
 })();
 
@@ -359,10 +368,10 @@ db.exec(`
 // 内置权限代码（菜单 + 操作）
 const PERMISSIONS = [
   ['page:index',     '物料汇总表',   'menu',   10],
-  ['page:prestudy',  '预研',         'menu',   20],
+  ['page:prestudy',  '项目',         'menu',   20],
   ['page:selection', '选型',         'menu',   30],
   ['page:audits',    '稽核',         'menu',   40],
-  ['page:projects',  '项目信息',     'menu',   50],
+  ['page:projects',  'BOM信息',      'menu',   50],
   ['page:suppliers', '供应商信息',   'menu',   60],
   ['page:categories', '品类',        'menu',   65],
   ['page:qcps',      '关键工艺',     'menu',   70],
@@ -373,8 +382,11 @@ const PERMISSIONS = [
   ['action:export',  '导出',         'action', 130],
   ['action:import',  '导入',         'action', 140],
 ];
-const insertPerm = db.prepare('INSERT OR IGNORE INTO permissions (code, name, kind, sort) VALUES (?, ?, ?, ?)');
-for (const p of PERMISSIONS) insertPerm.run(...p);
+const upsertPerm = db.prepare(`
+  INSERT INTO permissions (code, name, kind, sort) VALUES (?, ?, ?, ?)
+  ON CONFLICT(code) DO UPDATE SET name = excluded.name, kind = excluded.kind, sort = excluded.sort
+`);
+for (const p of PERMISSIONS) upsertPerm.run(...p);
 
 // 管理员专属菜单：不授予任何普通业务角色（编辑 / 只读），品类与系统管理同等对待
 const ADMIN_ONLY_MENUS = ['page:admin', 'page:categories'];

@@ -18,7 +18,7 @@ const SUP_PAGE_SIZE = 10;
 
 // 列表列配置：中文列名 -> 字段名（用于单元格渲染）
 const SUPPLIER_COLUMNS = [
-  ['name', '供应商名称'],
+  ['name', '供应商'],
   ['material_type', '物料品类'],
   ['address', '工厂地址'],
   ['company_profile', '公司简介'],
@@ -220,7 +220,7 @@ async function saveSupplier() {
     audit_record: document.getElementById('f_audit_record').value.trim(),
     mass_production_record: document.getElementById('f_mass_production_record').value.trim(),
   };
-  if (!payload.name) return toast('供应商名称不能为空', 'error');
+  if (!payload.name) return toast('供应商不能为空', 'error');
   if (!payload.material_type) return toast('请选择物料品类', 'error');
   try {
     if (editingId) {
@@ -343,10 +343,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupBatchImport({
     api: 'suppliers',
     entity: '供应商',
-    requiredLabel: '供应商名称',
+    requiredLabel: '供应商',
     refresh: () => { loadSuppliers(); loadStats(); },
     fields: [
-      ['供应商名称', 'name'], ['物料品类', 'material_type'], ['工厂地址', 'address'],
+      ['供应商', 'name'], ['物料品类', 'material_type'], ['工厂地址', 'address'],
       ['公司简介', 'company_profile'], ['产品类型', 'product_type'], ['产能(手机)', 'capacity_phone'],
       ['模组客户', 'module_customers'], ['终端客户', 'terminal_customers'], ['体系能力', 'system_capability'],
       ['自动化能力', 'automation_capability'], ['检验能力', 'inspection_capability'],

@@ -53,6 +53,24 @@ function setCategoryValue(id, val) {
   sel.value = val || '';
 }
 
+// ---------- 供应商下拉库（统一 = 供应商信息中维护的「供应商」） ----------
+let supplierNamePromise = null;
+function loadSupplierNames() {
+  if (!supplierNamePromise) {
+    supplierNamePromise = apiGet('/api/meta')
+      .then((m) => (m && m.suppliers) || [])
+      .catch(() => []);
+  }
+  return supplierNamePromise;
+}
+// 填充输入框的候选供应商（datalist 自动补全）
+async function renderSupplierDatalist(id) {
+  const names = await loadSupplierNames();
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = names.map((s) => `<option value="${esc(s)}">`).join('');
+}
+
 // ---------- Toast ----------
 let toastTimer = null;
 function toast(msg, type = 'info', duration = 2600) {
@@ -125,6 +143,21 @@ function loadXlsxLib() {
   });
 }
 
+// 批量导入去重口径：同一对象（项目 / 专项 / 物料…）允许多条记录（一个项目会有多条风险点、
+// 多条信息），逐条保留；只有「所有导入列内容完全一致」的行才视为重复，合并保留第一条。
+function dedupeBatchImportRows(rows) {
+  const cols = ((BATCH_CFG && BATCH_CFG.fields) || []).map(([, field]) => field);
+  const seen = new Set();
+  const list = [];
+  rows.forEach((row) => {
+    const key = cols.map((f) => String(row[f] == null ? '' : row[f]).trim()).join('\u0001');
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push(row);
+  });
+  return { rows: list, removed: rows.length - list.length };
+}
+
 // 初始化批量导入/导出：cfg = { api, entity, fields:[[label, field],...], requiredLabel, refresh }
 function setupBatchImport(cfg) {
   BATCH_CFG = cfg;
@@ -166,7 +199,7 @@ function buildBatchImportModal() {
     const reqTip = BATCH_CFG.requiredLabel
       ? `第一行为表头，需包含 <b>${BATCH_CFG.requiredLabel}</b>（必填）`
       : '第一行为表头，所有列均为选填';
-    tip.innerHTML = `支持 .xlsx / .xls / .csv 文件。${reqTip}；列名可参考下载模板，多余列将忽略。`;
+    tip.innerHTML = `支持 .xlsx / .xls / .csv 文件。${reqTip}；列名可参考下载模板，多余列将忽略。<br>同一对象可有多条记录（如一个项目多条风险点）会逐条保留；仅「各列内容完全一致」的重复行合并为一条。`;
   }
 }
 
@@ -211,6 +244,15 @@ function parseBatchImportExcel() {
         // 表头 -> 字段映射（支持列名 / 字段名，忽略空格与大小写差异）
         const norm = (s) => String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, '');
         const map = {};
+        // 兼容历史模板列名：如「供应商」与「供应商名称」互为等价
+        const aliasOf = (label) => {
+          const s = String(label);
+          return s.endsWith('名称') ? [s.slice(0, -2)] : [`${s}名称`];
+        };
+        BATCH_CFG.fields.forEach(([label, field]) => {
+          aliasOf(label).forEach((a) => { if (a && a !== label) map[norm(a)] = field; });
+        });
+        // 精确列名优先级高于兼容别名
         BATCH_CFG.fields.forEach(([label, field]) => {
           map[norm(label)] = field;
           map[norm(field)] = field;
@@ -229,17 +271,20 @@ function parseBatchImportExcel() {
           });
           data.push(item);
         }
-        batchImportRows = data;
         if (!data.length) { toast('表格内容为空，仅表头无数据行', 'error'); return; }
+        // 只有「内容完全一致」的行才合并；同一项目的多条不同信息全部保留
+        const deduped = dedupeBatchImportRows(data);
+        batchImportRows = deduped.rows;
         // 预览（前 20 行）
         const head = document.getElementById('batchImportPreviewHead');
         const body = document.getElementById('batchImportPreviewBody');
         head.innerHTML = headers.map((h) => `<th>${esc(h)}</th>`).join('');
-        const show = data.slice(0, 20);
+        const show = batchImportRows.slice(0, 20);
         body.innerHTML = show.map((it) => `<tr>${BATCH_CFG.fields.map(([label, field]) => `<td>${esc(it[field]) || '-'}</td>`).join('')}</tr>`).join('');
         document.getElementById('batchImportPreviewWrap').style.display = 'block';
         document.getElementById('btnConfirmBatchImport').disabled = false;
-        toast(`解析出 ${data.length} 行数据${data.length > 20 ? '（预览前 20 行）' : ''}`, 'success');
+        const mergeTip = deduped.removed ? `，已合并 ${deduped.removed} 行内容完全重复的数据` : '';
+        toast(`解析出 ${batchImportRows.length} 行数据${mergeTip}${batchImportRows.length > 20 ? '（预览前 20 行）' : ''}`, 'success');
       } catch (err) {
         toast('解析失败：' + err.message, 'error');
       }
@@ -255,6 +300,8 @@ function confirmBatchImport() {
   apiPost('/api/' + BATCH_CFG.api + '/batch', { items: batchImportRows })
     .then((res) => {
       const errN = (res.errors || []).length;
+      const skipN = res.skipped || 0;
+      const skipTip = skipN ? `，跳过 ${skipN} 条内容重复` : '';
       if (errN) {
         // 展示具体失败原因（服务端逐行返回），便于用户修正文件
         const head = (res.errors || []).slice(0, 5).map((er) => {
@@ -265,9 +312,9 @@ function confirmBatchImport() {
           return `${line}${rowName}：${er.message}`;
         }).join('；');
         const more = errN > 5 ? `，另有 ${errN - 5} 条同类错误` : '';
-        toast(`成功导入 ${res.success} 条，失败 ${errN} 条。${head}${more}`, 'error', 8000);
+        toast(`成功导入 ${res.success} 条${skipTip}，失败 ${errN} 条。${head}${more}`, 'error', 8000);
       } else {
-        toast(`成功导入 ${res.success} 条`, 'success');
+        toast(`成功导入 ${res.success} 条${skipTip}`, 'success');
       }
       closeModal('batchImportModal');
       if (typeof BATCH_CFG.refresh === 'function') BATCH_CFG.refresh();

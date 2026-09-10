@@ -9,6 +9,8 @@ node.exe
 # IDE / 工具配置
 .codebuddy/
 .playwright-cli/
+.agents/
+skills-lock.json
 .idea/
 .vscode/
 *.swp

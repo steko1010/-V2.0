@@ -87,13 +87,6 @@ function renderQcps() {
         </td>
       </tr>`)
     .join('');
-  const sups = [...new Set(qcpItems.map((q) => q.supplier).filter(Boolean))];
-  const supList = document.getElementById('supList');
-  if (supList) {
-    supList.innerHTML = sups
-      .map((s) => `<option value="${esc(s)}">`)
-      .join('');
-  }
   const allCb = document.getElementById('qcpCheckAll');
   if (allCb) allCb.checked = false;
 }
@@ -254,11 +247,6 @@ async function batchDeleteQcps() {
 
 async function loadStats() {
   const s = await apiGet('/api/qcps/stats');
-  const find = (rows, name) => (rows.find((r) => r.name === name) || {}).value || 0;
-  document.getElementById('st_total').textContent = s.total || 0;
-  document.getElementById('st_active').textContent = s.active || 0;
-  document.getElementById('st_draft').textContent = find(s.byStatus, '草稿');
-  document.getElementById('st_void').textContent = find(s.byStatus, '作废');
   // 按品类 · 工序数量（不去重）
   const catProcess = (s.byCategory || []).map((r) => ({ name: r.name, value: r.processCount, hint: '工序' }));
   renderBars('barCategoryProcess', catProcess, '#7c3aed');
@@ -312,6 +300,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const cats = await loadMidCategories();
   metaCats = cats || [];
   await renderCategoryOptions('f_category', '请选择');
+  // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
+  await renderSupplierDatalist('supList');
   loadQcps();
   loadStats();
 });

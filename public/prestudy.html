@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>预研 - 物料开发认证管理系统</title>
+  <title>项目 - 物料开发认证管理系统</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -17,10 +17,10 @@
         </div>
       </div>
       <nav class="nav">
-        <a data-menu="page:prestudy" href="prestudy.html" class="active">预研</a>
+        <a data-menu="page:prestudy" href="prestudy.html" class="active">项目</a>
         <a data-menu="page:selection" href="selection.html">选型</a>
         <a data-menu="page:audits" href="audits.html">稽核</a>
-        <a data-menu="page:projects" href="projects.html">项目信息</a>
+        <a data-menu="page:projects" href="projects.html">BOM信息</a>
         <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
         <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
         <a data-menu="page:admin" href="admin.html">系统管理</a>
@@ -29,7 +29,7 @@
     <main class="main">
       <div class="page-head">
         <div>
-          <h1>预研</h1>
+          <h1>项目</h1>
           <div class="desc">预研专项的录入、AI 信息提取与展示管理</div>
         </div>
       </div>
@@ -51,7 +51,7 @@
             <button class="btn btn-primary" onclick="openPrestudyModal()" data-permission="action:create">＋ 新增专项</button>
           </div>
           <div class="toolbar">
-            <input type="text" id="pKeyword" class="search-input" placeholder="搜索物料品类 / 专项名称 / 风险 / 立项 / P1 / P2 / P3 / 状态 / 责任人">
+            <input type="text" id="pKeyword" class="search-input" placeholder="搜索物料品类 / 供应商 / 专项名称 / 风险 / 立项 / P1 / P2 / P3 / 状态 / 责任人">
             <button class="btn" onclick="loadPrestudies(1)">查询</button>
             <button class="btn" onclick="resetPrestudies()">重置</button>
           </div>
@@ -62,6 +62,7 @@
                   <th style="width:36px"><input type="checkbox" id="preCheckAll" onclick="togglePreAll(this)" title="全选本页"></th>
                   <th>序号</th>
                   <th>物料品类</th>
+                  <th>供应商</th>
                   <th>专项名称</th>
                   <th>立项</th>
                   <th>P1</th>
@@ -96,9 +97,9 @@
           <div class="card-title">专项分析</div>
           <div class="chart-grid">
             <div class="card"><div class="card-title">按物料品类</div><div class="bar-list" id="barCategory"></div></div>
-            <div class="card"><div class="card-title">按状态</div><div class="bar-list" id="barStatus"></div></div>
-            <div class="card"><div class="card-title">按进度</div><div class="bar-list" id="barProgress"></div></div>
+            <div class="card"><div class="card-title">按供应商</div><div class="bar-list" id="barSupplier"></div></div>
             <div class="card"><div class="card-title">按责任人</div><div class="bar-list" id="barOwner"></div></div>
+            <div class="card"><div class="card-title">按状态</div><div class="bar-list" id="barStatus"></div></div>
           </div>
         </div>
         <div class="card">
@@ -134,6 +135,10 @@
             <select id="f_category">
               <option value="">请选择</option>
             </select>
+          </div>
+          <div class="form-item half">
+            <label>供应商</label>
+            <input id="f_supplier" placeholder="供应商名称">
           </div>
           <div class="form-item half">
             <label>专项名称<span class="req">*</span></label>

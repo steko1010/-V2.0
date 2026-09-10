@@ -1,4 +1,4 @@
-// ================= 项目信息：两个子界面 =================
+// ================= BOM信息：两个子界面 =================
 
 let editingId = null;
 let projectItems = [];
@@ -50,7 +50,6 @@ function switchTab(name) {
   if (name === 'manage') loadProjects();
   if (name === 'analysis') {
     loadStats();
-    loadPrestudyStats();
   }
 }
 
@@ -87,7 +86,7 @@ function downloadProjectImportTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '项目导入模板');
-  XLSX.writeFile(wb, '项目信息导入模板.xlsx');
+  XLSX.writeFile(wb, 'BOM信息导入模板.xlsx');
 }
 
 // 解析 Excel 文件并预览
@@ -293,7 +292,7 @@ async function exportProjects() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `项目信息_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `BOM信息_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -330,7 +329,7 @@ function buildSpecFields() {
 function openProjectModal(id) {
   editingId = id || null;
   const row = id ? projectItems.find((p) => p.id === id) : null;
-  document.getElementById('projectModalTitle').textContent = row ? '编辑项目信息' : '新建项目信息';
+  document.getElementById('projectModalTitle').textContent = row ? '编辑BOM信息' : '新建BOM信息';
   document.getElementById('f_project_name').value = row ? row.project_name : '';
   document.getElementById('f_supplier').value = row ? row.supplier : '';
   setCategoryValue('f_category', row ? row.category : '');
@@ -370,7 +369,7 @@ async function saveProject() {
 }
 
 async function deleteProject(id) {
-  if (!await confirmDialog('确定删除该项目信息吗？')) return;
+  if (!await confirmDialog('确定删除该BOM信息吗？')) return;
   try {
     await apiDelete('/api/projects/' + id);
     toast('已删除', 'success');
@@ -389,8 +388,8 @@ function toggleProjAll(cb) {
 
 async function batchDeleteProjects() {
   const ids = [...document.querySelectorAll('#projectBody .proj-check:checked')].map((x) => parseInt(x.value, 10));
-  if (!ids.length) return toast('请先勾选要删除的项目信息', 'error');
-  if (!await confirmDialog(`确定删除选中的 ${ids.length} 条项目信息？`)) return;
+  if (!ids.length) return toast('请先勾选要删除的BOM信息', 'error');
+  if (!await confirmDialog(`确定删除选中的 ${ids.length} 条BOM信息？`)) return;
   const allCb = document.getElementById('projCheckAll');
   let ok = 0;
   try {
@@ -487,6 +486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   // 项目品类下拉：数据源 = 品类管理中维护的物料中类
   await renderCategoryOptions('f_category', '请选择');
-  // 预加载列表（供供应商 datalist 使用）
+  // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
+  await renderSupplierDatalist('pSupList');
   loadProjects().catch(() => {});
 });

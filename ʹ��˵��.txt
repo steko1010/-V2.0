@@ -11,14 +11,14 @@
 【功能页面】
   物料汇总表       http://localhost:3000/         物料台账录入、查询、认证状态管理
   选型查重         http://localhost:3000/selection.html
-  项目信息         http://localhost:3000/projects.html   BOM 信息 + AI 自动提取
+  BOM信息          http://localhost:3000/projects.html   BOM 信息 + AI 自动提取
   供应商信息       http://localhost:3000/suppliers.html
   预研专项         http://localhost:3000/prestudy.html
   稽核记录         http://localhost:3000/audits.html
   关键工艺 QCP     http://localhost:3000/qcps.html       工序管控 + 分析看板
 
 【AI 自动提取（可选功能）】
-  「项目信息-一、BOM信息」支持上传 BOM 文档，由 AI 自动提取供应商、品类、
+  「BOM信息」支持上传 BOM 文档，由 AI 自动提取供应商、品类、
   项目名称及各物料规格字段。
   启用方法：用记事本打开 .env 文件，把 AI_API_KEY= 后面填入你申请的
   API Key 后保存，重启系统即可（默认已配好 DeepSeek 参数，可自行更换其他服务商）。

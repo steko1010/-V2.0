@@ -85,13 +85,6 @@ function renderAudits() {
         </td>
       </tr>`)
     .join('');
-  const sups = [...new Set(auditItems.map((a) => a.supplier).filter(Boolean))];
-  const supList = document.getElementById('supList');
-  if (supList) {
-    supList.innerHTML = sups
-      .map((s) => `<option value="${esc(s)}">`)
-      .join('');
-  }
   const allCb = document.getElementById('auditCheckAll');
   if (allCb) allCb.checked = false;
 }
@@ -294,6 +287,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   await renderCategoryOptions('filterMaterialType', '全部物料品类');
   await renderCategoryOptions('f_material_type', '请选择');
+  // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
+  await renderSupplierDatalist('supList');
   loadAudits();
   loadStats();
 });

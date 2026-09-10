@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>项目信息 - 物料开发认证管理系统</title>
+  <title>BOM信息 - 物料开发认证管理系统</title>
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -18,10 +18,10 @@
         </div>
       </div>
       <nav class="nav">
-        <a data-menu="page:prestudy" href="prestudy.html">预研</a>
+        <a data-menu="page:prestudy" href="prestudy.html">项目</a>
         <a data-menu="page:selection" href="selection.html">选型</a>
         <a data-menu="page:audits" href="audits.html">稽核</a>
-        <a data-menu="page:projects" href="projects.html" class="active">项目信息</a>
+        <a data-menu="page:projects" href="projects.html" class="active">BOM信息</a>
         <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
         <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
         <a data-menu="page:admin" href="admin.html">系统管理</a>
@@ -30,28 +30,28 @@
     <main class="main">
       <div class="page-head">
         <div>
-          <h1>项目信息</h1>
-          <div class="desc">项目信息的录入、管理与分析展示</div>
+          <h1>BOM信息</h1>
+          <div class="desc">BOM信息的录入、管理与分析展示</div>
         </div>
       </div>
 
       <!-- 子界面 Tab 切换 -->
       <div class="sub-tabs">
-        <button class="sub-tab active" data-tab="manage">一、BOM信息</button>
+        <button class="sub-tab active" data-tab="manage">一、BOM列表</button>
         <button class="sub-tab" data-tab="analysis">二、分析看板</button>
       </div>
 
       <!-- 子界面一：信息管理 -->
       <section class="sub-panel active" id="panel-manage">
-        <!-- 项目信息列表 -->
+        <!-- BOM信息列表 -->
         <div class="card">
           <div class="card-title">
-            <span>项目信息列表</span>
+            <span>BOM信息列表</span>
             <div>
               <button class="btn" onclick="openProjectImportModal()" data-permission="action:import">📥 批量导入</button>
               <button class="btn" onclick="exportProjects()" data-permission="action:export">📤 批量导出</button>
               <button class="btn btn-danger" onclick="batchDeleteProjects()" data-permission="action:delete">🗑 批量删除</button>
-              <button class="btn btn-primary" onclick="openProjectModal()" data-permission="action:create">＋ 新建项目信息</button>
+              <button class="btn btn-primary" onclick="openProjectModal()" data-permission="action:create">＋ 新建BOM信息</button>
             </div>
           </div>
           <div class="toolbar">
@@ -66,7 +66,7 @@
             </table>
             <div class="empty" id="projectEmpty" style="display:none">
               <div class="big">🗂️</div>
-              <div>暂无项目信息，点击「新建项目信息」手动录入</div>
+              <div>暂无BOM信息，点击「新建BOM信息」手动录入</div>
             </div>
             <div class="toolbar" id="projectPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
           </div>
@@ -79,7 +79,7 @@
           <div class="stat-card accent-blue">
             <div class="label">项目总数</div>
             <div class="value" id="st_total">0</div>
-            <div class="hint">全部项目信息</div>
+            <div class="hint">全部BOM信息</div>
           </div>
           <div class="stat-card accent-green">
             <div class="label">供应商数</div>
@@ -112,43 +112,15 @@
             <div id="recentProjects"></div>
           </div>
         </div>
-
-        <div class="card" style="margin-top:20px">
-          <div class="card-title">预研专项分析</div>
-          <div class="stat-grid">
-            <div class="stat-card accent-blue"><div class="label">专项总数</div><div class="value" id="ps_st_total">0</div><div class="hint">全部预研专项</div></div>
-            <div class="stat-card accent-green"><div class="label">进行中</div><div class="value" id="ps_st_doing">0</div><div class="hint">正在推进</div></div>
-            <div class="stat-card accent-amber"><div class="label">已完成</div><div class="value" id="ps_st_done">0</div><div class="hint">已结项</div></div>
-            <div class="stat-card accent-red"><div class="label">暂停/搁置</div><div class="value" id="ps_st_paused">0</div><div class="hint">暂停或风险状态</div></div>
-          </div>
-          <div class="chart-grid">
-            <div class="card"><div class="card-title">按品类</div><div class="bar-list" id="ps_barCategory"></div></div>
-            <div class="card"><div class="card-title">按状态</div><div class="bar-list" id="ps_barStatus"></div></div>
-            <div class="card"><div class="card-title">按进度</div><div class="bar-list" id="ps_barProgress"></div></div>
-            <div class="card"><div class="card-title">按责任人</div><div class="bar-list" id="ps_barOwner"></div></div>
-          </div>
-          <div class="table-wrap" style="margin-top:16px">
-            <table class="data-table">
-              <thead>
-                <tr><th>序号</th><th>品类</th><th>专项名称</th><th>立项</th><th>P1</th><th>P2</th><th>P3</th><th>状态</th><th>责任人</th></tr>
-              </thead>
-              <tbody id="ps_recentBody"></tbody>
-            </table>
-            <div class="empty" id="ps_recentEmpty" style="display:none">
-              <div class="big">🔬</div>
-              <div>暂无预研专项数据</div>
-            </div>
-          </div>
-        </div>
       </section>
     </main>
   </div>
 
-  <!-- 批量导入项目信息弹窗 -->
+  <!-- 批量导入BOM信息弹窗 -->
   <div class="modal-mask" id="projectImportModal">
     <div class="modal modal-lg">
       <div class="modal-head">
-        <h3>批量导入项目信息</h3>
+        <h3>批量导入BOM信息</h3>
         <button class="modal-close" onclick="closeModal('projectImportModal')">×</button>
       </div>
       <div class="modal-body">
@@ -179,11 +151,11 @@
     </div>
   </div>
 
-  <!-- 新建/编辑项目信息弹窗 -->
+  <!-- 新建/编辑BOM信息弹窗 -->
   <div class="modal-mask" id="projectModal">
     <div class="modal modal-lg">
       <div class="modal-head">
-        <h3 id="projectModalTitle">新建项目信息</h3>
+        <h3 id="projectModalTitle">新建BOM信息</h3>
         <button class="modal-close" onclick="closeModal('projectModal')">×</button>
       </div>
       <div class="form-grid">
@@ -193,7 +165,7 @@
         </div>
         <div class="form-item half">
           <label>供应商</label>
-          <input id="f_supplier" list="pSupList" placeholder="供应商名称">
+          <input id="f_supplier" list="pSupList" placeholder="供应商">
           <datalist id="pSupList"></datalist>
         </div>
         <div class="form-item half">
@@ -218,6 +190,5 @@
   <div id="toast"></div>
   <script src="js/common.js"></script>
   <script src="js/projects.js"></script>
-  <script src="js/projects-prestudy.js"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ async function loadMeta() {
   try {
     meta = await apiGet('/api/meta');
     fillSelect('a_status', meta.statuses);
+    await renderSupplierDatalist('supList');
     if (meta.statuses.length) {
       document.getElementById('a_status').value = meta.statuses[0] || '黄区';
     }
