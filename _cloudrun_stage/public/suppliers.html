@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>供应商信息 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html">项目</a>
+        <a data-menu="page:selection" href="selection.html">选型</a>
+        <a data-menu="page:audits" href="audits.html">稽核</a>
+        <a data-menu="page:projects" href="projects.html">BOM信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html" class="active">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>供应商信息</h1>
+          <div class="desc">供应商台账管理：物料品类、工厂信息、客户资源与体系能力</div>
+        </div>
+      </div>
+
+      <!-- 子界面 Tab -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="info">🏭 一、供应商信息</button>
+        <button class="sub-tab" data-tab="analysis">📊 二、分析看板</button>
+      </div>
+
+      <!-- 供应商信息 -->
+      <section class="sub-panel active" id="panel-info">
+      <div class="stat-grid">
+        <div class="stat-card accent-blue"><div class="label">供应商总数</div><div class="value" id="st_total">0</div><div class="hint">全部供应商</div></div>
+        <div class="stat-card accent-green"><div class="label">合作中</div><div class="value" id="st_active">0</div><div class="hint">正常合作状态</div></div>
+        <div class="stat-card accent-amber"><div class="label">A 级供应商</div><div class="value" id="st_a">0</div><div class="hint">评级为 A 的供应商</div></div>
+        <div class="stat-card accent-red"><div class="label">暂停 / 淘汰</div><div class="value" id="st_paused">0</div><div class="hint">非合作状态供应商</div></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin:0 0 12px;">
+          <button class="btn" onclick="openBatchImportModal()" data-permission="action:import">📥 批量导入</button>
+          <button class="btn" onclick="exportBatchData()" data-permission="action:export">📤 批量导出</button>
+          <button class="btn btn-danger" onclick="batchDeleteSuppliers()" data-permission="action:delete">🗑 批量删除</button>
+          <button class="btn btn-primary" onclick="openSupplierModal()" data-permission="action:create">＋ 新增供应商</button>
+        </div>
+        <div class="toolbar">
+          <select id="materialTypeFilter" onchange="loadSuppliers()">
+            <option value="">全部物料品类</option>
+          </select>
+          <input type="text" id="keyword" class="search-input" placeholder="搜索名称 / 品类 / 产品类型 / 客户...">
+          <button class="btn" onclick="loadSuppliers()">查询</button>
+          <button class="btn" onclick="resetSuppliers()">重置</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="supplierTable">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="supCheckAll" onclick="toggleSupAll(this)" title="全选本页"></th>
+                <th>供应商名称</th>
+                <th>物料品类</th>
+                <th>工厂地址</th>
+                <th>公司简介</th>
+                <th>产品类型</th>
+                <th>产能(手机)</th>
+                <th>模组客户</th>
+                <th>终端客户</th>
+                <th>体系能力</th>
+                <th>自动化能力</th>
+                <th>检验能力</th>
+                <th>追溯能力</th>
+                <th>测试能力</th>
+                <th>返修</th>
+                <th>优势</th>
+                <th>劣势</th>
+                <th>审核地址</th>
+                <th>审核时间</th>
+                <th>审核成员</th>
+                <th>审核结果</th>
+                <th>QSA</th>
+                <th>QPA</th>
+                <th>审核记录</th>
+                <th>传音量产记录</th>
+                <th>附件</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="supplierBody"></tbody>
+          </table>
+          <div class="empty" id="emptyBox" style="display:none">
+            <div class="big">🏭</div>
+            <div>暂无供应商，点击上方「新增供应商」开始录入</div>
+          </div>
+          <div class="toolbar" id="supplierPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
+        </div>
+      </div>
+
+      </section>
+
+      <!-- 供应商分析 -->
+      <section class="sub-panel" id="panel-analysis">
+      <div class="card">
+        <div class="card-title">供应商分析</div>
+        <div class="chart-grid">
+          <div class="card"><div class="card-title">按合作状态</div><div class="bar-list" id="barStatus"></div></div>
+          <div class="card"><div class="card-title">按评级</div><div class="bar-list" id="barRating"></div></div>
+          <div class="card chart-wide"><div class="card-title">物料品类分布</div><div class="bar-list" id="barCategory"></div></div>
+        </div>
+      </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 新增/编辑弹窗 -->
+  <div class="modal-mask" id="supplierModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增供应商</h3>
+        <button class="modal-close" onclick="closeModal('supplierModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-section">基本信息</div>
+        <div class="form-item half">
+          <label>供应商名称<span class="req">*</span></label>
+          <input id="f_name" placeholder="必填">
+        </div>
+        <div class="form-item half">
+          <label>物料品类<span class="req">*</span></label>
+          <select id="f_material_type">
+            <option value="">请选择</option>
+          </select>
+        </div>
+        <div class="form-item half">
+          <label>联系人</label>
+          <input id="f_contact" placeholder="联系人姓名">
+        </div>
+        <div class="form-item half">
+          <label>联系电话</label>
+          <input id="f_phone" placeholder="手机 / 座机">
+        </div>
+        <div class="form-item half">
+          <label>邮箱</label>
+          <input id="f_email" placeholder="example@mail.com">
+        </div>
+        <div class="form-item half">
+          <label>工厂地址</label>
+          <input id="f_address" placeholder="工厂地址">
+        </div>
+        <div class="form-item half">
+          <label>评级</label>
+          <select id="f_rating">
+            <option value="A">A 级</option>
+            <option value="B">B 级</option>
+            <option value="C" selected>C 级</option>
+            <option value="D">D 级</option>
+          </select>
+        </div>
+        <div class="form-item half">
+          <label>合作状态</label>
+          <select id="f_status">
+            <option value="合作中" selected>合作中</option>
+            <option value="暂停">暂停</option>
+            <option value="淘汰">淘汰</option>
+          </select>
+        </div>
+
+        <div class="form-section">公司信息</div>
+        <div class="form-item half">
+          <label>公司简介（成立日期、人员）</label>
+          <input id="f_company_profile" placeholder="如：成立于 2005 年，员工 300 人">
+        </div>
+        <div class="form-item half">
+          <label>产品类型</label>
+          <input id="f_product_type" placeholder="如：FPC 软板 / 盖板玻璃 / 背光模组">
+        </div>
+        <div class="form-item half">
+          <label>产能（手机）</label>
+          <input id="f_capacity_phone" placeholder="如：月产能 500K">
+        </div>
+        <div class="form-item half">
+          <label>返修</label>
+          <input id="f_rework" placeholder="如：支持返修 / 不支持返修">
+        </div>
+
+        <div class="form-section">客户资源</div>
+        <div class="form-item half">
+          <label>模组客户</label>
+          <input id="f_module_customers" placeholder="如：京东方 / 天马 / 华星...">
+        </div>
+        <div class="form-item half">
+          <label>终端客户</label>
+          <input id="f_terminal_customers" placeholder="如：华为 / 小米 / OPPO...">
+        </div>
+
+        <div class="form-section">体系与能力</div>
+        <div class="form-item half">
+          <label>体系能力</label>
+          <input id="f_system_capability" placeholder="如：ISO9001 / IATF16949">
+        </div>
+        <div class="form-item half">
+          <label>自动化能力</label>
+          <input id="f_automation_capability" placeholder="如：自动化产线占比 / 设备">
+        </div>
+        <div class="form-item half">
+          <label>检验能力</label>
+          <input id="f_inspection_capability" placeholder="如：IQC / 检测设备">
+        </div>
+        <div class="form-item half">
+          <label>追溯能力</label>
+          <input id="f_traceability_capability" placeholder="如：批次追溯 / 条码管理">
+        </div>
+        <div class="form-item half">
+          <label>测试能力</label>
+          <input id="f_testing_capability" placeholder="如：信赖性测试 / 电测">
+        </div>
+
+        <div class="form-section">综合评价</div>
+        <div class="form-item half">
+          <label>优势</label>
+          <input id="f_strengths" placeholder="供应商优势">
+        </div>
+        <div class="form-item half">
+          <label>劣势</label>
+          <input id="f_weaknesses" placeholder="供应商劣势">
+        </div>
+        <div class="form-item full">
+          <label>备注</label>
+          <textarea id="f_remark" placeholder="备注信息"></textarea>
+        </div>
+
+        <div class="form-section">审核信息</div>
+        <div class="form-item half">
+          <label>审核地址</label>
+          <input id="f_audit_address" placeholder="审核地址">
+        </div>
+        <div class="form-item half">
+          <label>审核时间</label>
+          <input id="f_audit_time" placeholder="如：2024.12.13">
+        </div>
+        <div class="form-item half">
+          <label>审核成员</label>
+          <input id="f_audit_members" placeholder="审核成员">
+        </div>
+        <div class="form-item half">
+          <label>审核结果</label>
+          <input id="f_audit_result" placeholder="如：通过 / 不通过">
+        </div>
+        <div class="form-item half">
+          <label>QSA</label>
+          <input id="f_qsa" placeholder="QSA 分数">
+        </div>
+        <div class="form-item half">
+          <label>QPA</label>
+          <input id="f_qpa" placeholder="QPA 分数">
+        </div>
+        <div class="form-item half">
+          <label>审核记录</label>
+          <input id="f_audit_record" placeholder="审核记录">
+        </div>
+        <div class="form-item half">
+          <label>传音量产记录</label>
+          <input id="f_mass_production_record" placeholder="如：有 / 无">
+        </div>
+
+        <div class="form-section">附件</div>
+        <div class="form-item full">
+          <label>附件上传</label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="f_attach_file" style="width:auto;flex:1;min-width:220px">
+            <button type="button" class="btn" onclick="uploadAttachment()">上传附件</button>
+            <a id="attachLink" href="#" target="_blank" style="display:none;color:var(--primary)"></a>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:6px">支持 PDF / Word / Excel / 图片，单文件不超过 20MB</div>
+          <input type="hidden" id="f_attachment">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('supplierModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveSupplier()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/suppliers.js"></script>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统管理 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="index.html" data-menu="page:index">物料汇总表</a>
+        <a href="prestudy.html" data-menu="page:prestudy">项目</a>
+        <a href="selection.html" data-menu="page:selection">选型</a>
+        <a href="audits.html" data-menu="page:audits">稽核</a>
+        <a href="projects.html" data-menu="page:projects">BOM信息</a>
+        <a href="suppliers.html" data-menu="page:suppliers">供应商信息</a>
+        <a href="qcps.html" data-menu="page:qcps">关键工艺</a>
+        <a href="admin.html" class="active" data-menu="page:admin">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>系统管理</h1>
+          <div class="desc">品类、用户、角色、权限码、数据范围等系统基础配置的统一管理</div>
+        </div>
+      </div>
+
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="users">用户</button>
+        <button class="sub-tab" data-tab="roles">角色</button>
+        <button class="sub-tab" data-tab="perms">权限码</button>
+        <button class="sub-tab" data-tab="categories">品类</button>
+      </div>
+
+      <!-- 用户 -->
+      <section class="sub-panel active" id="panel-users">
+        <div class="card">
+          <div class="toolbar" style="justify-content:flex-end">
+            <button class="btn btn-primary" onclick="openUserModal()" data-permission="page:admin">＋ 新增用户</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>账号</th><th>姓名</th><th>状态</th><th>超管</th><th>角色</th><th>数据范围</th><th>创建时间</th><th>操作</th></tr>
+              </thead>
+              <tbody id="userBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 角色 -->
+      <section class="sub-panel" id="panel-roles">
+        <div class="card">
+          <div class="toolbar" style="justify-content:flex-end">
+            <button class="btn btn-primary" onclick="openRoleModal()" data-permission="page:admin">＋ 新增角色</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>账号</th><th>姓名</th><th>描述</th><th>内置</th><th>权限数</th><th>操作</th></tr>
+              </thead>
+              <tbody id="roleBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 权限码 -->
+      <section class="sub-panel" id="panel-perms">
+        <div class="card">
+          <div class="card-title">系统权限码（内置）</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>类型</th><th>权限码</th><th>名称</th></tr>
+              </thead>
+              <tbody id="permBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 品类 -->
+      <section class="sub-panel" id="panel-categories">
+        <div class="card">
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin:0 0 12px; flex-wrap:wrap;">
+            <button class="btn" onclick="openBatchImportModal()" data-permission="action:import">📥 批量导入</button>
+            <button class="btn" onclick="exportBatchData()" data-permission="action:export">📤 批量导出</button>
+            <button class="btn btn-danger" id="bulkDeleteCat" onclick="bulkDeleteCategories()" data-permission="action:delete" disabled>🗑 批量删除</button>
+            <button class="btn btn-primary" onclick="openAddCategory()" data-permission="action:create">＋ 新增品类</button>
+          </div>
+          <div class="toolbar">
+            <input type="text" id="keyword" class="search-input" placeholder="搜索物料大类 / 中类 / 小类...">
+            <button class="btn" onclick="applyFilters()">查询</button>
+            <button class="btn" onclick="resetCategories()">重置</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="catTable">
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="selectAllCat" title="全选当前页"></th>
+                  <th>物料大类</th>
+                  <th>物料中类</th>
+                  <th>物料小类</th>
+                  <th style="width:140px">操作</th>
+                </tr>
+              </thead>
+              <tbody id="categoryBody"></tbody>
+            </table>
+            <div class="empty" id="emptyBox" style="display:none">
+              <div class="big">🏷️</div>
+              <div>暂无品类，点击上方「新增品类」开始录入</div>
+            </div>
+            <div class="toolbar" id="categoryPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 用户弹窗 -->
+  <div class="modal-mask" id="userModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3 id="userModalTitle">新增用户</h3>
+        <button class="modal-close" onclick="closeModal('userModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item half">
+          <label>账号<span class="req">*</span></label>
+          <input id="u_username" autocomplete="off">
+        </div>
+        <div class="form-item half">
+          <label>密码<span class="req" id="u_pwd_req">*</span></label>
+          <input id="u_password" type="password" autocomplete="new-password" placeholder="编辑时留空表示不修改">
+        </div>
+        <div class="form-item half">
+          <label>显示姓名</label>
+          <input id="u_display_name">
+        </div>
+        <div class="form-item half">
+          <label>状态</label>
+          <select id="u_status"><option>启用</option><option>停用</option></select>
+        </div>
+        <div class="form-item half">
+          <label>是否超管</label>
+          <select id="u_is_super"><option value="0">否</option><option value="1">是</option></select>
+        </div>
+        <div class="form-item full">
+          <label>角色（可多选）</label>
+          <div id="u_roles" style="display:flex; gap:14px; flex-wrap:wrap"></div>
+        </div>
+        <div class="form-item half">
+          <label>品类可见范围（第三层）</label>
+          <div id="u_cats" style="display:flex; gap:14px; flex-wrap:wrap"></div>
+        </div>
+        <div class="form-item full">
+          <label>供应商可见范围（第三层，每行一个）</label>
+          <textarea id="u_suppliers" rows="3" placeholder="每行一个供应商名称"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('userModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveUser()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 角色弹窗 -->
+  <div class="modal-mask" id="roleModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="roleModalTitle">新增角色</h3>
+        <button class="modal-close" onclick="closeModal('roleModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item half">
+          <label>账号<span class="req">*</span></label>
+          <input id="r_code" placeholder="例如：zhangsan">
+        </div>
+        <div class="form-item half">
+          <label>姓名<span class="req">*</span></label>
+          <input id="r_name">
+        </div>
+        <div class="form-item full">
+          <label>描述</label>
+          <input id="r_desc">
+        </div>
+        <div class="form-item full">
+          <label>权限（可多选）</label>
+          <div id="r_perms" style="display:flex; flex-wrap:wrap; gap:14px; max-height:280px; overflow:auto; padding:8px; border:1px solid #e5e7eb; border-radius:6px"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('roleModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveRole()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 角色权限查看弹窗 -->
+  <div class="modal-mask" id="permViewModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="permViewTitle">查看权限</h3>
+        <button class="modal-close" onclick="closeModal('permViewModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item full">
+          <label>菜单权限</label>
+          <div id="pv_menus" style="display:flex; flex-wrap:wrap; gap:14px; max-height:200px; overflow:auto; padding:8px; border:1px solid #e5e7eb; border-radius:6px"></div>
+        </div>
+        <div class="form-item full">
+          <label>操作权限</label>
+          <div id="pv_actions" style="display:flex; flex-wrap:wrap; gap:14px; max-height:200px; overflow:auto; padding:8px; border:1px solid #e5e7eb; border-radius:6px"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-primary" onclick="closeModal('permViewModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 品类新增/编辑弹窗 -->
+  <div class="modal-mask" id="categoryModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增品类</h3>
+        <button class="modal-close" onclick="closeModal('categoryModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-section">品类信息</div>
+        <div class="form-item half">
+          <label>物料大类<span class="req">*</span></label>
+          <input id="f_big" placeholder="如：显示屏 / 结构件 / 电子料">
+        </div>
+        <div class="form-item half">
+          <label>物料中类</label>
+          <input id="f_mid" placeholder="如：盖板玻璃 / FPC 软板（选填）">
+        </div>
+        <div class="form-item half">
+          <label>物料小类</label>
+          <input id="f_small" placeholder="如：CG / FPC（选填）">
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);padding:0 4px">完整品类路径示例：显示屏 → 盖板玻璃 → CG</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('categoryModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCategory()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QCP - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">料</div>
+        <div>
+          <div class="name">物料认证管理</div>
+          <div class="sub">Material Cert</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a data-menu="page:prestudy" href="prestudy.html">项目</a>
+        <a data-menu="page:selection" href="selection.html">选型</a>
+        <a data-menu="page:audits" href="audits.html">稽核</a>
+        <a data-menu="page:projects" href="projects.html">BOM信息</a>
+        <a data-menu="page:suppliers" href="suppliers.html">供应商信息</a>
+        <a data-menu="page:qcps" href="qcps.html" class="active">关键工艺</a>
+        <a data-menu="page:admin" href="admin.html">系统管理</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>关键工艺</h1>
+          <div class="desc">关键工艺：工序、控制项目、规格要求与检验方法</div>
+        </div>
+      </div>
+
+      <!-- 子界面 Tab -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="list">📋 一、QCP</button>
+        <button class="sub-tab" data-tab="analysis">📊 二、分析看板</button>
+      </div>
+
+      <!-- QCP 列表 -->
+      <section class="sub-panel active" id="panel-list">
+      <div class="stat-grid">
+        <div class="stat-card accent-blue"><div class="label">QCP 总数</div><div class="value" id="st_total">0</div><div class="hint">全部控制计划</div></div>
+        <div class="stat-card accent-green"><div class="label">生效中</div><div class="value" id="st_active">0</div><div class="hint">正在执行</div></div>
+        <div class="stat-card accent-amber"><div class="label">草稿</div><div class="value" id="st_draft">0</div><div class="hint">尚未发布</div></div>
+        <div class="stat-card accent-red"><div class="label">作废</div><div class="value" id="st_void">0</div><div class="hint">已作废</div></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin:0 0 12px;">
+          <button class="btn" onclick="openBatchImportModal()" data-permission="action:import">📥 批量导入</button>
+          <button class="btn" onclick="exportBatchData()" data-permission="action:export">📤 批量导出</button>
+          <button class="btn btn-danger" onclick="batchDeleteQcps()" data-permission="action:delete">🗑 批量删除</button>
+          <button class="btn btn-primary" onclick="openQcpModal()" data-permission="action:create">＋ 新增 QCP</button>
+        </div>
+        <div class="cat-layout">
+          <!-- 左侧：品类目录（每个品类一个目录） -->
+          <aside class="cat-dir">
+            <div class="cat-dir-head">
+              <span>🗂 品类目录</span>
+              <button class="cat-dir-refresh" title="刷新目录" onclick="loadDir(true)">↻</button>
+            </div>
+            <div id="catDirList"></div>
+          </aside>
+          <!-- 右侧：当前目录下的 QCP 列表 -->
+          <div class="cat-main">
+            <div class="toolbar">
+              <input type="text" id="keyword" class="search-input" placeholder="搜索工序 / 控制项目 / 规格...">
+              <select id="filterStatus">
+                <option value="">全部状态</option>
+                <option value="草稿">草稿</option>
+                <option value="生效">生效</option>
+                <option value="作废">作废</option>
+              </select>
+              <button class="btn" onclick="loadQcps(1)">查询</button>
+              <button class="btn" onclick="resetQcps()">重置</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="qcpTable">
+                <thead>
+                  <tr>
+                    <th style="width:36px"><input type="checkbox" id="qcpCheckAll" onclick="toggleQcpAll(this)" title="全选本页"></th>
+                    <th>品类</th>
+                    <th>工序</th>
+                    <th>控制项目</th>
+                    <th>检验方法</th>
+                    <th>频次</th>
+                    <th>检测设备</th>
+                    <th>责任人</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="qcpBody"></tbody>
+              </table>
+              <div class="empty" id="emptyBox" style="display:none">
+                <div class="big">📝</div>
+                <div>该目录下暂无 QCP，点击右上角「＋ 新增 QCP」或目录行上的「＋」录入</div>
+              </div>
+              <div class="toolbar" id="qcpPager" style="display:none; justify-content:center; gap:8px; margin-top:12px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </section>
+
+      <!-- QCP 分析 -->
+      <section class="sub-panel" id="panel-analysis">
+      <div class="card">
+        <div class="card-title">QCP 分析 · 按品类</div>
+        <div class="chart-grid">
+          <div class="card chart-wide">
+            <div class="card-title">按品类 · 工序数量</div>
+            <div class="bar-list" id="barCategoryProcess"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">QCP 分析</div>
+        <div class="chart-grid">
+          <div class="card chart-wide"><div class="card-title">按工序</div><div class="bar-list" id="barProcess"></div></div>
+        </div>
+      </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 新增/编辑弹窗 -->
+  <div class="modal-mask" id="qcpModal">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增 QCP</h3>
+        <button class="modal-close" onclick="closeModal('qcpModal')">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-item half">
+          <label>品类</label>
+          <select id="f_category">
+            <option value="">请选择</option>
+          </select>
+        </div>
+        <div class="form-item half">
+          <label>QCP 名称</label>
+          <input id="f_name" placeholder="选填，如：贴片电阻质量控制计划">
+        </div>
+        <div class="form-item half">
+          <label>供应商</label>
+          <input id="f_supplier" list="supList" placeholder="供应商名称">
+          <datalist id="supList"></datalist>
+        </div>
+        <div class="form-item half">
+          <label>工序</label>
+          <input id="f_process" placeholder="如：贴装 / 回流焊 / 来料检验">
+        </div>
+        <div class="form-item half">
+          <label>控制项目</label>
+          <input id="f_control_item" placeholder="如：阻值、容值、焊点强度">
+        </div>
+        <div class="form-item half">
+          <label>规格要求</label>
+          <input id="f_spec" placeholder="如：10KΩ ±1%">
+        </div>
+        <div class="form-item half">
+          <label>检验方法</label>
+          <input id="f_method" placeholder="如：万用表测量 / 目视检查">
+        </div>
+        <div class="form-item half">
+          <label>频次</label>
+          <input id="f_freq" placeholder="如：每批 / 每 2 小时">
+        </div>
+        <div class="form-item half">
+          <label>检测设备</label>
+          <input id="f_device" placeholder="如：LCR 表 / 游标卡尺">
+        </div>
+        <div class="form-item half">
+          <label>责任人</label>
+          <input id="f_responsible" placeholder="责任人或岗位">
+        </div>
+        <div class="form-item half">
+          <label>状态</label>
+          <select id="f_status">
+            <option value="草稿">草稿</option>
+            <option value="生效" selected>生效</option>
+            <option value="作废">作废</option>
+          </select>
+        </div>
+        <div class="form-item full">
+          <label>备注</label>
+          <textarea id="f_remark" placeholder="备注信息"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('qcpModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveQcp()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/common.js"></script>
+  <script src="js/qcps.js"></script>
+</body>
+</html>

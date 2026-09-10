@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 物料开发认证管理系统</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background: #f5f7fa; }
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .login-card { width: 100%; max-width: 380px; background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.08); }
+    .login-head { padding: 28px 32px 8px; text-align: center; }
+    .login-head .logo { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff; font-size: 26px; line-height: 56px; margin: 0 auto 10px; }
+    .login-head h1 { font-size: 18px; margin: 4px 0; }
+    .login-head .sub { color: #6b7280; font-size: 12px; }
+    .login-body { padding: 16px 32px 8px; }
+    .login-body .form-item { margin-bottom: 14px; }
+    .login-body input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+    .login-body input:focus { outline: none; border-color: #2563eb; }
+    .login-foot { padding: 8px 32px 28px; }
+    .login-btn { width: 100%; padding: 11px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .login-btn:hover { background: #1d4ed8; }
+    .login-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+    .login-hint { color: #9ca3af; font-size: 12px; text-align: center; padding-bottom: 24px; }
+    .err-msg { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-head">
+        <div class="logo">料</div>
+        <h1>物料开发认证管理系统</h1>
+        <div class="sub">Material Cert Manager</div>
+      </div>
+      <div class="login-body">
+        <div class="form-item">
+          <input id="loginUsername" placeholder="账号" autocomplete="username">
+        </div>
+        <div class="form-item">
+          <input id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+        </div>
+        <div class="err-msg" id="loginErr"></div>
+      </div>
+      <div class="login-foot">
+        <button class="login-btn" id="btnLogin">登 录</button>
+        <div class="login-hint">默认管理员账号：admin / admin123</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const $ = (s) => document.querySelector(s);
+      // 已登录则直接跳首页
+      fetch('/api/me').then((r) => r.ok ? r.json() : null).then((data) => {
+        if (data && data.user) {
+          const back = new URLSearchParams(location.search).get('redirect') || 'index.html';
+          location.replace(back);
+        }
+      });
+      function doLogin() {
+        const username = $('#loginUsername').value.trim();
+        const password = $('#loginPassword').value;
+        if (!username || !password) {
+          $('#loginErr').textContent = '请输入账号与密码';
+          return;
+        }
+        $('#loginErr').textContent = '';
+        const btn = $('#btnLogin');
+        btn.disabled = true; btn.textContent = '登录中...';
+        fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        })
+          .then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.message || '登录失败'))))
+          .then(() => {
+            const back = new URLSearchParams(location.search).get('redirect') || 'index.html';
+            location.replace(back);
+          })
+          .catch((e) => {
+            $('#loginErr').textContent = e.message;
+            btn.disabled = false; btn.textContent = '登 录';
+          });
+      }
+      $('#btnLogin').addEventListener('click', doLogin);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+    })();
+  </script>
+</body>
+</html>
