@@ -1,0 +1,40 @@
+server:
+  # 沿用原 3000 端口，浏览器预览地址保持不变（需先停掉 Node 版服务）
+  port: ${PORT:3000}
+  servlet:
+    session:
+      timeout: 12h
+      cookie:
+        http-only: true
+        same-site: lax
+
+spring:
+  application:
+    name: material-cert-server
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/material_cert?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&connectionCollation=utf8mb4_unicode_ci}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      # 每次启动执行 schema.sql（全部 CREATE TABLE IF NOT EXISTS，幂等）
+      mode: always
+      schema-locations: classpath:schema.sql
+      encoding: UTF-8
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      fail-on-empty-beans: false
+
+app:
+  # 前端 dist（React SPA）目录，相对 backend/ 运行目录
+  frontend-dist: ${FRONTEND_DIST:../frontend/dist}
+  # 附件上传目录（相对 backend/ 运行目录）
+  upload-dir: ${UPLOAD_DIR:../uploads}
+  # 附件上传体积上限 20MB（前端已有同值限制）
+  upload-max-bytes: 20971520
+
+logging:
+  level:
+    org.springframework.jdbc.core: warn
