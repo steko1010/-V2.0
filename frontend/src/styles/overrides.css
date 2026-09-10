@@ -1,0 +1,36 @@
+/* =========================================================
+   新前端覆写样式：登录页专用 + React 化微调
+   （基础布局/表格/弹窗/徽章等直接复用 ./style.css 原类）
+   ========================================================= */
+
+/* ---------- 登录页 ---------- */
+.login-body { background: #f5f7fa; min-height: 100vh; }
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.login-card { width: 100%; max-width: 380px; background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.08); }
+.login-head { padding: 28px 32px 8px; text-align: center; }
+.login-head .logo { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff; font-size: 26px; line-height: 56px; margin: 0 auto 10px; }
+.login-head h1 { font-size: 18px; margin: 4px 0; color: var(--text); }
+.login-head .sub { color: #6b7280; font-size: 12px; }
+.login-body .form-item { margin-bottom: 14px; }
+.login-body input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box; color: var(--text); }
+.login-body input:focus { outline: none; border-color: #2563eb; }
+.login-foot { padding: 8px 32px 28px; }
+.login-btn { width: 100%; padding: 11px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.login-btn:hover { background: #1d4ed8; }
+.login-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+.login-hint { color: #9ca3af; font-size: 12px; text-align: center; padding-bottom: 24px; }
+.err-msg { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 4px; }
+
+/* ---------- 会话载入 / 未授权提示 ---------- */
+.route-loading, .perm-denied { padding: 60px 20px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.route-loading .spinner { display: inline-block; width: 22px; height: 22px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: rt-spin .8s linear infinite; margin-bottom: 10px; }
+@keyframes rt-spin { to { transform: rotate(360deg); } }
+
+/* ---------- 安全兜底：宽弹窗（旧 common.js 用到 .modal-lg） ---------- */
+.modal-lg { width: 860px; max-width: 94vw; }
+
+/* ---------- React 化微调 ---------- */
+/* 侧边栏品牌区可点击回到首页 */
+.brand { cursor: pointer; user-select: none; }
+.brand:hover { background: rgba(255,255,255,.04); }
+.brand a { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 10px; min-width: 0; }
