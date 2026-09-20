@@ -5,7 +5,7 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE } from '../components/ui/Pagination';
 import { ExportButton, ImportModal } from '../components/ui/ImportExport';
 import { StatusBadge } from '../components/ui/Badge';
 import SupplierSelect from '../components/ui/SupplierSelect';
@@ -21,7 +21,6 @@ function ChartView({ option }) {
   );
 }
 
-const PAGE_SIZE = 10;
 const MOD_COLORS = { 绿区: '#10b981', 黄区: '#f59e0b', 红区: '#ef4444' };
 const SUP_COLORS = { 合作中: '#10b981', 暂停: '#f59e0b', 淘汰: '#ef4444' };
 
@@ -115,7 +114,7 @@ export default function Selection() {
     try {
       const [st, list] = await Promise.all([apiGet('/api/suppliers/stats'), apiGet('/api/suppliers')]);
       setSupStats(st);
-      setBoardSup((list.items || []).slice(0, 20));
+      setBoardSup((list.items || []).slice(0, PAGE_SIZE));
     } catch (e) { toast(e.message, 'error'); }
   }, []);
 

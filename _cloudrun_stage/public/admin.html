@@ -45,7 +45,17 @@
       <!-- 用户 -->
       <section class="sub-panel active" id="panel-users">
         <div class="card">
-          <div class="toolbar" style="justify-content:flex-end">
+          <div class="toolbar">
+            <input type="text" id="userKeyword" class="search-input" placeholder="搜索账号 / 姓名...">
+            <select id="userStatusFilter">
+              <option value="">全部状态</option>
+              <option value="启用">启用</option>
+              <option value="停用">停用</option>
+            </select>
+            <select id="userRoleFilter"><option value="">全部角色</option></select>
+            <button class="btn" onclick="loadUsers()">查询</button>
+            <button class="btn" onclick="resetUserFilters()">重置</button>
+            <span style="flex:1"></span>
             <button class="btn btn-primary" onclick="openUserModal()" data-permission="page:admin">＋ 新增用户</button>
           </div>
           <div class="table-wrap">
@@ -62,7 +72,11 @@
       <!-- 角色 -->
       <section class="sub-panel" id="panel-roles">
         <div class="card">
-          <div class="toolbar" style="justify-content:flex-end">
+          <div class="toolbar">
+            <input type="text" id="roleKeyword" class="search-input" placeholder="搜索角色名称 / 标识 / 描述...">
+            <button class="btn" onclick="loadRoles()">查询</button>
+            <button class="btn" onclick="resetRoleFilters()">重置</button>
+            <span style="flex:1"></span>
             <button class="btn btn-primary" onclick="openRoleModal()" data-permission="page:admin">＋ 新增角色</button>
           </div>
           <div class="table-wrap">
@@ -167,7 +181,7 @@
         </div>
         <div class="form-item full">
           <label>供应商可见范围（第三层，每行一个）</label>
-          <textarea id="u_suppliers" rows="3" placeholder="每行一个供应商名称"></textarea>
+          <textarea id="u_suppliers" rows="3" placeholder="每行一个供应商"></textarea>
         </div>
       </div>
       <div class="modal-foot">

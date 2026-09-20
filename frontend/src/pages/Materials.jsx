@@ -5,11 +5,10 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE } from '../components/ui/Pagination';
 import { DocBadge, ExpiryBadge, StatusBadge } from '../components/ui/Badge';
 import SupplierSelect from '../components/ui/SupplierSelect';
 
-const PAGE_SIZE = 10;
 const EMPTY_FORM = { name: '', supplier: '', model: '', status: '' };
 
 export default function Materials() {

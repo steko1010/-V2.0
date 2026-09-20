@@ -41,6 +41,14 @@ async function loadQcps(page) {
   if (keyword) params.set('keyword', keyword);
   if (status) params.set('status', status);
   if (activeCategory) params.set('category', activeCategory);
+  // 高级筛选：供应商 / 责任人
+  const setParam = (key, id) => {
+    const el = document.getElementById(id);
+    const v = el ? String(el.value || '').trim() : '';
+    if (v) params.set(key, v);
+  };
+  setParam('supplier', 'filterSupplier');
+  setParam('responsible', 'filterResponsible');
   const data = await apiGet('/api/qcps?' + params.toString());
   qcpItems = data.items || [];
   qcpPage = data.page;
@@ -87,13 +95,6 @@ function renderQcps() {
         </td>
       </tr>`)
     .join('');
-  const sups = [...new Set(qcpItems.map((q) => q.supplier).filter(Boolean))];
-  const supList = document.getElementById('supList');
-  if (supList) {
-    supList.innerHTML = sups
-      .map((s) => `<option value="${esc(s)}">`)
-      .join('');
-  }
   const allCb = document.getElementById('qcpCheckAll');
   if (allCb) allCb.checked = false;
 }
@@ -146,8 +147,9 @@ async function loadDir(force) {
 }
 
 function resetQcps() {
-  document.getElementById('keyword').value = '';
-  document.getElementById('filterStatus').value = '';
+  for (const id of ['keyword', 'filterStatus', 'filterSupplier', 'filterResponsible']) {
+    document.getElementById(id).value = '';
+  }
   activeCategory = '';
   renderDir();
   loadQcps(1);
@@ -254,11 +256,6 @@ async function batchDeleteQcps() {
 
 async function loadStats() {
   const s = await apiGet('/api/qcps/stats');
-  const find = (rows, name) => (rows.find((r) => r.name === name) || {}).value || 0;
-  document.getElementById('st_total').textContent = s.total || 0;
-  document.getElementById('st_active').textContent = s.active || 0;
-  document.getElementById('st_draft').textContent = find(s.byStatus, '草稿');
-  document.getElementById('st_void').textContent = find(s.byStatus, '作废');
   // 按品类 · 工序数量（不去重）
   const catProcess = (s.byCategory || []).map((r) => ({ name: r.name, value: r.processCount, hint: '工序' }));
   renderBars('barCategoryProcess', catProcess, '#7c3aed');
@@ -312,6 +309,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const cats = await loadMidCategories();
   metaCats = cats || [];
   await renderCategoryOptions('f_category', '请选择');
+  // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
+  await renderSupplierDatalist('supList');
+  // 列表筛选下拉：供应商 / 责任人
+  await Promise.all([
+    renderMetaOptions('filterSupplier', 'qcpSuppliers', '全部供应商'),
+    renderMetaOptions('filterResponsible', 'qcpResponsibles', '全部责任人'),
+  ]);
   loadQcps();
   loadStats();
 });

@@ -4,11 +4,10 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE } from '../components/ui/Pagination';
 import { ExportButton, ImportModal } from '../components/ui/ImportExport';
 import BarList from '../components/charts/BarList';
 
-const PAGE_SIZE = 10;
 const ACCENT_CLS = ['accent-blue', 'accent-green', 'accent-amber', 'accent-red'];
 const RATINGS = ['A', 'B', 'C', 'D'];
 const STATUSES = ['合作中', '暂停', '淘汰'];

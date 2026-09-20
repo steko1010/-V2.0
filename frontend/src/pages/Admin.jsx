@@ -5,12 +5,11 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE, usePageSlice } from '../components/ui/Pagination';
 import { ExportButton, ImportModal } from '../components/ui/ImportExport';
 
 const BUILTIN_ROLE_LABELS = { admin: '管理员', editor: '编辑员', readonly: '只读' };
 const builtinRoleLabel = (code) => BUILTIN_ROLE_LABELS[code] || '内置管理员';
-const CAT_PAGE_SIZE = 20;
 const CAT_IMPORT_FIELDS = [['物料大类', 'big'], ['物料中类', 'mid'], ['物料小类', 'small']];
 
 const kindBadge = (kind) => (
@@ -41,6 +40,11 @@ export default function Admin() {
   const [catModal, setCatModal] = useState({ open: false, editingId: null, big: '', mid: '', small: '', busy: false });
   const [importOpen, setImportOpen] = useState(false);
 
+  // 用户 / 角色 / 权限码：接口返回全量数据，前端分页（每页 PAGE_SIZE 行），切换标签页回到第 1 页
+  const usersPage = usePageSlice(users, { resetKeys: [tab] });
+  const rolesPage = usePageSlice(roles, { resetKeys: [tab] });
+  const permsPage = usePageSlice(perms, { resetKeys: [tab] });
+
   const loadUsers = useCallback(async () => {
     try { const d = await apiGet('/api/users'); setUsers(d.items || []); } catch (e) { toast(e.message, 'error'); }
   }, []);
@@ -52,7 +56,7 @@ export default function Admin() {
   }, []);
   const loadCats = useCallback(async (p = catPage, kw = catKw) => {
     try {
-      const d = await apiGet('/api/material-categories?' + new URLSearchParams({ page: p, pageSize: CAT_PAGE_SIZE, keyword: kw }));
+      const d = await apiGet('/api/material-categories?' + new URLSearchParams({ page: p, pageSize: PAGE_SIZE, keyword: kw }));
       if (!(d.items || []).length && p > 1) { setCatPage(p - 1); return loadCats(p - 1, kw); }
       setCatRows(d.items || []);
       setCatTotal(d.total || 0);
@@ -294,7 +298,7 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => {
+                  {usersPage.pageItems.map((u) => {
                     const scopeTxt = u.is_super
                       ? <span className="badge done">全部</span>
                       : `${(u.scopes && u.scopes.categories || []).length}品类 / ${(u.scopes && u.scopes.suppliers || []).length}供应商`;
@@ -325,6 +329,7 @@ export default function Admin() {
                 <div className="empty"><div className="big">👤</div><div>暂无用户</div></div>
               )}
             </div>
+            <Pagination page={usersPage.page} total={usersPage.total} pageSize={PAGE_SIZE} onGo={usersPage.setPage} />
           </div>
         </section>
       )}
@@ -343,7 +348,7 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {roles.map((r) => (
+                  {rolesPage.pageItems.map((r) => (
                     <tr key={r.id}>
                       <td>
                         {r.built_in
@@ -368,6 +373,7 @@ export default function Admin() {
                 <div className="empty"><div className="big">🎭</div><div>暂无角色</div></div>
               )}
             </div>
+            <Pagination page={rolesPage.page} total={rolesPage.total} pageSize={PAGE_SIZE} onGo={rolesPage.setPage} />
           </div>
         </section>
       )}
@@ -382,7 +388,7 @@ export default function Admin() {
                   <tr><th>类型</th><th>权限码</th><th>名称</th></tr>
                 </thead>
                 <tbody>
-                  {perms.map((p) => (
+                  {permsPage.pageItems.map((p) => (
                     <tr key={p.code}>
                       <td>{kindBadge(p.kind)}</td>
                       <td><code>{p.code}</code></td>
@@ -395,6 +401,7 @@ export default function Admin() {
                 <div className="empty"><div className="big">🔑</div><div>暂无权限码</div></div>
               )}
             </div>
+            <Pagination page={permsPage.page} total={permsPage.total} pageSize={PAGE_SIZE} onGo={permsPage.setPage} />
           </div>
         </section>
       )}
@@ -458,7 +465,7 @@ export default function Admin() {
                 </div>
               )}
             </div>
-            <Pagination page={catPage} total={catTotal} pageSize={CAT_PAGE_SIZE} onGo={(p) => loadCats(p, catKw)} />
+            <Pagination page={catPage} total={catTotal} pageSize={PAGE_SIZE} onGo={(p) => loadCats(p, catKw)} />
           </div>
         </section>
       )}

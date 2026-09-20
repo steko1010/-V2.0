@@ -56,6 +56,12 @@
           </div>
           <div class="toolbar">
             <input type="text" id="pKeyword" class="search-input" placeholder="搜索项目名称 / 基线 / MOD料号 / panel / IC / 背光厂...">
+            <select id="filterCategory"><option value="">全部品类</option></select>
+            <select id="filterSupplier"><option value="">全部供应商</option></select>
+            <select id="filterFlow"><option value="">全部流程</option></select>
+            <select id="filterSource"><option value="">全部来源</option></select>
+            <input type="date" id="filterDateFrom" title="录入时间起">
+            <input type="date" id="filterDateTo" title="录入时间止">
             <button class="btn" onclick="loadProjects(1)">查询</button>
             <button class="btn" onclick="resetProjects()">重置</button>
           </div>

@@ -22,6 +22,18 @@ async function loadPrestudies(page = 1) {
   try {
     const params = new URLSearchParams({ page, pageSize: PRE_PAGE_SIZE });
     if (keyword) params.set('keyword', keyword);
+    // 高级筛选：品类 / 供应商 / 状态 / 责任人 / 录入时间范围
+    const setParam = (key, id) => {
+      const el = document.getElementById(id);
+      const v = el ? String(el.value || '').trim() : '';
+      if (v) params.set(key, v);
+    };
+    setParam('category', 'filterCategory');
+    setParam('supplier', 'filterSupplier');
+    setParam('status', 'filterStatus');
+    setParam('owner', 'filterOwner');
+    setParam('dateFrom', 'filterDateFrom');
+    setParam('dateTo', 'filterDateTo');
     const res = await fetch('/api/prestudies?' + params.toString());
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || '加载失败');
@@ -98,7 +110,9 @@ function preBadge(cat) {
 }
 
 function resetPrestudies() {
-  document.getElementById('pKeyword').value = '';
+  for (const id of ['pKeyword', 'filterCategory', 'filterSupplier', 'filterStatus', 'filterOwner', 'filterDateFrom', 'filterDateTo']) {
+    document.getElementById(id).value = '';
+  }
   loadPrestudies(1);
 }
 
@@ -308,5 +322,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.addEventListener('click', () => switchPrestudyTab(btn.dataset.tab));
   });
   await renderCategoryOptions('f_category', '请选择');
+  // 列表筛选下拉：品类 / 供应商 / 状态 / 责任人
+  await renderCategoryOptions('filterCategory', '全部品类');
+  await Promise.all([
+    renderMetaOptions('filterSupplier', 'suppliers', '全部供应商'),
+    renderMetaOptions('filterStatus', 'prestudyStatuses', '全部状态'),
+    renderMetaOptions('filterOwner', 'owners', '全部责任人'),
+  ]);
   loadPrestudies(1);
 });

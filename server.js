@@ -110,6 +110,26 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ---------- 工具函数 ----------
 
+// ---------- 列表筛选通用工具（各业务列表页的高级筛选共用） ----------
+
+// 日期范围筛选：起止可只填其一；日期列为 TEXT（YYYY-MM-DD 或含时分秒），统一按前 10 位比较
+function dateRangeClause(field, from, to) {
+  const parts = [];
+  const params = [];
+  const f = String(from === undefined || from === null ? '' : from).trim();
+  const t = String(to === undefined || to === null ? '' : to).trim();
+  if (f) { parts.push(`substr(IFNULL(${field}, ''), 1, 10) >= ?`); params.push(f); }
+  if (t) { parts.push(`substr(IFNULL(${field}, ''), 1, 10) <= ?`); params.push(t); }
+  return { parts, params };
+}
+
+// 排序：字段名走白名单映射，方向仅允许 ASC / DESC，避免拼接注入
+function orderClause(sortBy, order, allowed, fallback = 'id ASC') {
+  const key = allowed[String(sortBy || '')];
+  if (!key) return fallback;
+  return `${key} ${String(order || '').toLowerCase() === 'desc' ? 'DESC' : 'ASC'}`;
+}
+
 function cleanRow(row) {
   if (!row) return null;
   return row;
@@ -417,14 +437,32 @@ function ensureUserRole(username, displayName) {
   return role.id;
 }
 
+// 用户列表（支持关键词 / 状态 / 角色筛选）
 app.get('/api/users', requireAuth, requirePermission('page:admin'), (req, res) => {
+  const q = req.query || {};
+  const keyword = String(q.keyword || '').trim();
+  const status = String(q.status || '').trim();
+  const role = String(q.role || '').trim();
+  const where = [];
+  const params = [];
+  if (keyword) {
+    where.push('(u.username LIKE ? OR u.display_name LIKE ?)');
+    params.push(`%${keyword}%`, `%${keyword}%`);
+  }
+  if (status) { where.push('u.status = ?'); params.push(status); }
+  if (role) {
+    where.push('EXISTS (SELECT 1 FROM user_roles ur2 LEFT JOIN roles r2 ON r2.id = ur2.role_id WHERE ur2.user_id = u.id AND (r2.name = ? OR r2.code = ?))');
+    params.push(role, role);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const rows = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.status, u.is_super, u.created_at,
       GROUP_CONCAT(r.name) AS roles
     FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
+    ${whereSql}
     GROUP BY u.id ORDER BY u.id
-  `).all();
+  `).all(...params);
   const items = rows.map((u) => ({
     ...u,
     scopes: {
@@ -619,20 +657,64 @@ app.use('/api', (req, res, next) => {
 
 // ---------- 物料 CRUD ----------
 
-// 列表：搜索 + 筛选 + 分页
-app.get('/api/materials', (req, res) => {
-  const { keyword, category, status, supplier, page = 1, pageSize = 20 } = req.query;
+// 物料列表与导出共用的筛选条件（列表页高级筛选）
+// 支持参数：keyword、category、status、supplier、manufacturer、applied_by、
+//   expiring=30|60|90|expired|none（认证到期）、rohs/reach/msds/datasheet（资料状态）
+const MATERIAL_SORT_FIELDS = {
+  code: 'code', name: 'name', category: 'category', supplier: 'supplier',
+  manufacturer: 'manufacturer', status: 'status', cert_expire_date: 'cert_expire_date',
+  applied_by: 'applied_by', created_at: 'created_at',
+};
+
+function buildMaterialWhere(req) {
+  const q = req.query || {};
   const where = [];
   const params = [];
 
+  const keyword = String(q.keyword || '').trim();
   if (keyword) {
     const k = `%${keyword}%`;
     where.push('(code LIKE ? OR name LIKE ? OR model LIKE ? OR supplier LIKE ? OR manufacturer LIKE ?)');
     params.push(k, k, k, k, k);
   }
-  if (category) { where.push('category = ?'); params.push(category); }
-  if (status) { where.push('status = ?'); params.push(status); }
-  if (supplier) { where.push('supplier = ?'); params.push(supplier); }
+  const eq = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  const like = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} LIKE ?`); params.push(`%${v}%`); }
+  };
+  eq('category', q.category);
+  eq('status', q.status);
+  eq('supplier', q.supplier);
+  like('manufacturer', q.manufacturer);
+  like('applied_by', q.applied_by);
+  // 资料状态：ROHS / REACH / MSDS / 规格书
+  for (const d of DOCS) eq(d, q[d]);
+  // 认证到期：30/60/90 天内临期、已过期、未填写到期日
+  const expiring = String(q.expiring || '').trim();
+  if (expiring && expiring !== 'all') {
+    const today = new Date().toISOString().slice(0, 10);
+    if (['30', '60', '90'].includes(expiring)) {
+      where.push(`cert_expire_date != '' AND substr(cert_expire_date, 1, 10) >= ? AND substr(cert_expire_date, 1, 10) <= date(?, '+${expiring} day')`);
+      params.push(today, today);
+    } else if (expiring === 'expired') {
+      where.push(`cert_expire_date != '' AND substr(cert_expire_date, 1, 10) < ?`);
+      params.push(today);
+    } else if (expiring === 'none') {
+      where.push(`(cert_expire_date = '' OR cert_expire_date IS NULL)`);
+    }
+  }
+  return { where, params };
+}
+
+// 列表：搜索 + 筛选 + 排序 + 分页
+app.get('/api/materials', (req, res) => {
+  const { page = 1, pageSize = 20 } = req.query;
+  const built = buildMaterialWhere(req);
+  const where = built.where.slice();
+  const params = built.params.slice();
 
   // 第三层：按用户可见品类 / 供应商过滤
   const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
@@ -643,9 +725,10 @@ app.get('/api/materials', (req, res) => {
   const ps = Math.max(1, Math.min(100, parseInt(pageSize, 10) || 20));
   const offset = (p - 1) * ps;
 
+  const orderSql = orderClause(req.query.sortBy, req.query.order, MATERIAL_SORT_FIELDS, 'id ASC');
   const total = db.prepare(`SELECT COUNT(*) AS c FROM materials ${whereSql}`).get(...params).c;
   const rows = db.prepare(
-    `SELECT * FROM materials ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`
+    `SELECT * FROM materials ${whereSql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`
   ).all(...params, ps, offset);
 
   res.json({ total, page: p, pageSize: ps, items: rows });
@@ -709,22 +792,16 @@ app.post('/api/materials/batch', requirePermission('action:import'), (req, res, 
 // 物料台账导出（支持与列表一致的筛选：keyword / category / status / supplier）
 app.get('/api/materials/export', requirePermission('action:export'), (req, res, next) => {
   try {
-    const { keyword, category, status, supplier } = req.query;
-    const where = [];
-    const params = [];
-    if (keyword) {
-      const k = `%${keyword}%`;
-      where.push('(code LIKE ? OR name LIKE ? OR model LIKE ? OR supplier LIKE ? OR manufacturer LIKE ?)');
-      params.push(k, k, k, k, k);
-    }
-    if (category) { where.push('category = ?'); params.push(category); }
-    if (status) { where.push('status = ?'); params.push(status); }
-    if (supplier) { where.push('supplier = ?'); params.push(supplier); }
+    // 导出与列表保持同一套筛选条件（含制造商 / 申请人 / 到期临期 / 资料状态）
+    const built = buildMaterialWhere(req);
+    const where = built.where.slice();
+    const params = built.params.slice();
     // 按用户可见品类 / 供应商过滤
     const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
     if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const rows = db.prepare(`SELECT * FROM materials ${whereSql} ORDER BY id ASC`).all(...params);
+    const orderSql = orderClause(req.query.sortBy, req.query.order, MATERIAL_SORT_FIELDS, 'id ASC');
+    const rows = db.prepare(`SELECT * FROM materials ${whereSql} ORDER BY ${orderSql}`).all(...params);
     const headers = ['编码', '物料名称', '型号规格', '分类', '供应商', '制造商', '认证状态', '认证到期', 'ROHS', 'REACH', '申请人'];
     const fields = ['code', 'name', 'model', 'category', 'supplier', 'manufacturer', 'status', 'cert_expire_date', 'rohs', 'reach', 'applied_by'];
     const aoa = [headers];
@@ -922,7 +999,41 @@ app.get('/api/meta', (req, res) => {
   const suppliers = db.prepare(
     `SELECT DISTINCT name FROM suppliers WHERE TRIM(IFNULL(name, '')) != ''${supplierScope.where}`
   ).all(...supplierScope.params).map((r) => r.name).sort((a, b) => a.localeCompare(b, 'zh'));
-  res.json({ statuses: STATUSES, docStatuses: DOC_STATUSES, categories, suppliers });
+  // 列表高级筛选下拉数据源：从各业务表按用户可见范围取 DISTINCT 值，避免下拉缺项
+  const distinct = (table, col, scope) => {
+    try {
+      return db.prepare(
+        `SELECT DISTINCT ${col} AS v FROM ${table} WHERE TRIM(IFNULL(${col}, '')) != ''${scope.where}`
+      ).all(...scope.params).map((r) => r.v).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh'));
+    } catch (e) { return []; }
+  };
+  const matScope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
+  const proScope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
+  const preScope = scopeWhere(req, { categoryField: 'category', allowAllWhenEmpty: true });
+  const audScope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'supplier', allowAllWhenEmpty: true });
+  const qcpScope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
+
+  res.json({
+    statuses: STATUSES, docStatuses: DOC_STATUSES, categories, suppliers,
+    // 物料汇总表：制造商 / 申请人
+    manufacturers: distinct('materials', 'manufacturer', matScope),
+    appliedBy: distinct('materials', 'applied_by', matScope),
+    // 项目（预研 / 在研）：状态 / 责任人
+    prestudyStatuses: distinct('prestudies', 'status', preScope),
+    owners: distinct('prestudies', 'owner', preScope),
+    // BOM 信息：流程 / 来源
+    projectFlows: distinct('projects', 'flow', proScope),
+    projectSources: distinct('projects', 'source', proScope),
+    // 稽核：结果 / 稽核人员
+    auditResults: distinct('audits', 'result', audScope),
+    auditors: distinct('audits', 'auditor', audScope),
+    // 关键工艺：供应商 / 责任人
+    qcpSuppliers: distinct('qcps', 'supplier', qcpScope),
+    qcpResponsibles: distinct('qcps', 'responsible', qcpScope),
+    // 供应商：合作状态 / 评级（业务枚举）
+    supplierStatuses: ['合作中', '暂停', '淘汰'],
+    supplierRatings: ['A', 'B', 'C', 'D'],
+  });
 });
 
 // 新增品类（分类下拉可动态添加）
@@ -1108,19 +1219,41 @@ function pickProject(body, { partial = false } = {}) {
   return out;
 }
 
-// BOM信息列表（支持搜索）
-app.get('/api/projects', (req, res) => {
-  const { keyword, supplier, category } = req.query;
+// BOM信息列表与导出共用的筛选条件：关键词 / 供应商 / 品类 / 流程 / 来源 / 录入时间范围
+const PROJECT_SORT_FIELDS = {
+  project_name: 'project_name', supplier: 'supplier', category: 'category',
+  flow: 'flow', source: 'source', created_at: 'created_at',
+};
+
+function buildProjectWhere(req) {
+  const q = req.query || {};
   const where = [];
   const params = [];
+  const keyword = String(q.keyword || '').trim();
   if (keyword) {
     const k = `%${keyword}%`;
     const searchCols = ['project_name', 'supplier', 'category', 'flow', ...PROJECT_SPEC_FIELDS.map(([, f]) => f)];
     where.push(`(${searchCols.map((c) => `${c} LIKE ?`).join(' OR ')})`);
     searchCols.forEach(() => params.push(k));
   }
-  if (supplier) { where.push('supplier = ?'); params.push(supplier); }
-  if (category) { where.push('category = ?'); params.push(category); }
+  const eq = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eq('supplier', q.supplier);
+  eq('category', q.category);
+  eq('flow', q.flow);
+  eq('source', q.source);
+  const range = dateRangeClause('created_at', q.dateFrom, q.dateTo);
+  if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
+  return { where, params };
+}
+
+// BOM信息列表（支持搜索 + 筛选 + 排序 + 分页）
+app.get('/api/projects', (req, res) => {
+  const built = buildProjectWhere(req);
+  const where = built.where.slice();
+  const params = built.params.slice();
   // 第三层：按用户可见品类 / 供应商过滤
   const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -1130,8 +1263,9 @@ app.get('/api/projects', (req, res) => {
   const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 5));
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+  const orderSql = orderClause(req.query.sortBy, req.query.order, PROJECT_SORT_FIELDS, 'id ASC');
   const rows = db.prepare(
-    `SELECT * FROM projects ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`
+    `SELECT * FROM projects ${whereSql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`
   ).all(...params, pageSize, (page - 1) * pageSize);
   res.json({ total, page, pageSize, pages, items: rows });
 });
@@ -1139,22 +1273,16 @@ app.get('/api/projects', (req, res) => {
 // 批量导出BOM信息（Excel）
 app.get('/api/projects/export', requirePermission('action:export'), (req, res, next) => {
   try {
-    const { keyword, supplier, category } = req.query;
-    const where = [];
-    const params = [];
-    if (keyword) {
-      const k = `%${keyword}%`;
-      const searchCols = ['project_name', 'supplier', 'category', 'flow', ...PROJECT_SPEC_FIELDS.map(([, f]) => f)];
-      where.push(`(${searchCols.map((c) => `${c} LIKE ?`).join(' OR ')})`);
-      searchCols.forEach(() => params.push(k));
-    }
-    if (supplier) { where.push('supplier = ?'); params.push(supplier); }
-    if (category) { where.push('category = ?'); params.push(category); }
+    // 导出与列表保持同一套筛选条件（含流程 / 来源 / 录入时间范围）
+    const built = buildProjectWhere(req);
+    const where = built.where.slice();
+    const params = built.params.slice();
     // 第三层：按用户可见品类 / 供应商过滤
     const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
     if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const rows = db.prepare(`SELECT * FROM projects ${whereSql} ORDER BY id ASC`).all(...params);
+    const orderSql = orderClause(req.query.sortBy, req.query.order, PROJECT_SORT_FIELDS, 'id ASC');
+    const rows = db.prepare(`SELECT * FROM projects ${whereSql} ORDER BY ${orderSql}`).all(...params);
     const XLSX = require('xlsx');
     const headers = ['项目名称', '供应商', '品类', '流程', '来源', '录入时间', ...PROJECT_SPEC_FIELDS.map(([label]) => label)];
     const aoa = [headers];
@@ -1447,7 +1575,8 @@ function prestudyKindWhere(req) {
 // 预研专项列表（支持搜索）
 app.get('/api/prestudies', (req, res, next) => {
   try {
-    const { keyword } = req.query;
+    const q = req.query || {};
+    const keyword = String(q.keyword || '').trim();
     const where = [];
     const params = [];
     if (keyword) {
@@ -1456,6 +1585,17 @@ app.get('/api/prestudies', (req, res, next) => {
       where.push(`(${searchCols.map((c) => `${c} LIKE ?`).join(' OR ')})`);
       searchCols.forEach(() => params.push(k));
     }
+    // 高级筛选：品类 / 供应商 / 状态 / 责任人 / 立项时间范围
+    const eq = (field, val) => {
+      const v = String(val === undefined || val === null ? '' : val).trim();
+      if (v) { where.push(`${field} = ?`); params.push(v); }
+    };
+    eq('category', q.category);
+    eq('supplier', q.supplier);
+    eq('status', q.status);
+    eq('owner', q.owner);
+    const range = dateRangeClause('created_at', q.dateFrom, q.dateTo);
+    if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
     // 归属清单：默认只返回预研专项；「一、在研项目」传 kind=research
     const kindW = prestudyKindWhere(req);
     if (kindW.where) where.push(kindW.where.replace(/^ AND /, ''));
@@ -1730,6 +1870,15 @@ app.get('/api/suppliers', (req, res) => {
     params.push(k, k, k, k, k, k, k, k, k, k, k);
   }
   if (materialType) { where.push('material_type = ?'); params.push(materialType); }
+  // 高级筛选：合作状态 / 评级 / 录入时间范围
+  const eq = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eq('status', req.query.status);
+  eq('rating', req.query.rating);
+  const range = dateRangeClause('created_at', req.query.dateFrom, req.query.dateTo);
+  if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
   // 第三层：按用户可见品类（物料品类）/ 供应商范围过滤
   const scope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'name', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -1864,6 +2013,15 @@ app.get('/api/audits', (req, res) => {
   }
   if (result) { where.push('result = ?'); params.push(result); }
   if (materialType) { where.push('material_type = ?'); params.push(materialType); }
+  // 高级筛选：供应商 / 稽核人员 / 稽核日期范围
+  const eqAudit = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eqAudit('supplier', req.query.supplier);
+  eqAudit('auditor', req.query.auditor);
+  const range = dateRangeClause('audit_date', req.query.dateFrom, req.query.dateTo);
+  if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
   // 第三层：按用户可见品类（物料品类）/ 供应商范围过滤
   const scope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'supplier', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -2060,6 +2218,13 @@ app.get('/api/qcps', (req, res) => {
   }
   if (status) { where.push('status = ?'); params.push(status); }
   if (category) { where.push('category = ?'); params.push(category); }
+  // 高级筛选：供应商 / 责任人
+  const eqQcp = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eqQcp('supplier', req.query.supplier);
+  eqQcp('responsible', req.query.responsible);
   // 第三层：按用户可见品类 / 供应商过滤
   const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }

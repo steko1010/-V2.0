@@ -15,8 +15,29 @@ function switchAdminTab(name) {
   if (name === 'categories') loadCategories();
 }
 
+// 读取用户列表筛选条件（关键词 / 状态 / 角色）
+function userFilterQuery() {
+  const val = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value || '').trim() : '';
+  };
+  const params = new URLSearchParams();
+  if (val('userKeyword')) params.set('keyword', val('userKeyword'));
+  if (val('userStatusFilter')) params.set('status', val('userStatusFilter'));
+  if (val('userRoleFilter')) params.set('role', val('userRoleFilter'));
+  return params.toString();
+}
+
+function resetUserFilters() {
+  for (const id of ['userKeyword', 'userStatusFilter', 'userRoleFilter']) {
+    document.getElementById(id).value = '';
+  }
+  loadUsers();
+}
+
 async function loadUsers() {
-  const data = await apiGet('/api/users');
+  const qs = userFilterQuery();
+  const data = await apiGet('/api/users' + (qs ? '?' + qs : ''));
   const tbody = document.getElementById('userBody');
   tbody.innerHTML = (data.items || []).map((u) => {
     const scopeTxt = u.is_super ? '<span class="badge done">全部</span>' :
@@ -34,7 +55,7 @@ async function loadUsers() {
         <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${esc(u.username)}')">删除</button>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af">暂无用户</td></tr>';
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af">没有符合条件的用户</td></tr>';
 }
 
 async function loadRoles() {
@@ -45,7 +66,13 @@ async function loadRoles() {
   ROLES = roleData.items || [];
   const permMap = new Map((permData.items || []).map((p) => [p.code, p]));
   const tbody = document.getElementById('roleBody');
-  tbody.innerHTML = ROLES.map((r) => {
+  // 关键词筛选（名称 / 标识 / 描述），ROLES 保留全量供弹窗使用
+  const kwEl = document.getElementById('roleKeyword');
+  const kw = String((kwEl && kwEl.value) || '').trim().toLowerCase();
+  const roleList = kw
+    ? ROLES.filter((r) => [r.name, r.code, r.description].some((v) => String(v || '').toLowerCase().includes(kw)))
+    : ROLES;
+  tbody.innerHTML = roleList.map((r) => {
     const owned = (r.permissions || []).map((c) => permMap.get(c)).filter(Boolean);
     const menus = owned.filter((p) => p.kind === 'menu');
     const acts = owned.filter((p) => p.kind === 'action');
@@ -69,7 +96,13 @@ async function loadRoles() {
       <button class="btn btn-sm btn-danger" onclick="deleteRole(${r.id}, '${esc(r.name)}', ${r.built_in ? 1 : 0})">删除</button>
     </td>
   </tr>`;
-  }).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">暂无角色</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">没有符合条件的角色</td></tr>';
+}
+
+function resetRoleFilters() {
+  const kwEl = document.getElementById('roleKeyword');
+  if (kwEl) kwEl.value = '';
+  loadRoles();
 }
 
 async function loadPerms() {
@@ -497,6 +530,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const r = await apiGet('/api/roles');
     ROLES = r.items || [];
   } catch (e) { /* ignore */ }
+  // 用户列表「角色」筛选下拉：内置角色显示中文名，自定义角色显示角色名
+  const roleFilter = document.getElementById('userRoleFilter');
+  if (roleFilter) {
+    roleFilter.innerHTML = '<option value="">全部角色</option>'
+      + ROLES.map((r) => {
+        const label = r.built_in ? builtinRoleLabel(r.code) : r.name;
+        const val = r.built_in ? (r.name || r.code) : r.name;
+        return `<option value="${esc(val)}">${esc(label)}</option>`;
+      }).join('');
+  }
   loadUsers();
 
   // 支持 ?tab=categories 直达（原「品类」独立页 / 收藏链接跳转而来）

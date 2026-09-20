@@ -56,6 +56,12 @@
           </div>
           <div class="toolbar">
             <input type="text" id="pKeyword" class="search-input" placeholder="搜索项目名称 / 基线 / MOD料号 / panel / IC / 背光厂...">
+            <select id="filterCategory"><option value="">全部品类</option></select>
+            <select id="filterSupplier"><option value="">全部供应商</option></select>
+            <select id="filterFlow"><option value="">全部流程</option></select>
+            <select id="filterSource"><option value="">全部来源</option></select>
+            <input type="date" id="filterDateFrom" title="录入时间起">
+            <input type="date" id="filterDateTo" title="录入时间止">
             <button class="btn" onclick="loadProjects(1)">查询</button>
             <button class="btn" onclick="resetProjects()">重置</button>
           </div>
@@ -112,34 +118,6 @@
             <div id="recentProjects"></div>
           </div>
         </div>
-
-        <div class="card" style="margin-top:20px">
-          <div class="card-title">预研专项分析</div>
-          <div class="stat-grid">
-            <div class="stat-card accent-blue"><div class="label">专项总数</div><div class="value" id="ps_st_total">0</div><div class="hint">全部预研专项</div></div>
-            <div class="stat-card accent-green"><div class="label">进行中</div><div class="value" id="ps_st_doing">0</div><div class="hint">正在推进</div></div>
-            <div class="stat-card accent-amber"><div class="label">已完成</div><div class="value" id="ps_st_done">0</div><div class="hint">已结项</div></div>
-            <div class="stat-card accent-red"><div class="label">暂停/搁置</div><div class="value" id="ps_st_paused">0</div><div class="hint">暂停或风险状态</div></div>
-          </div>
-          <div class="chart-grid">
-            <div class="card"><div class="card-title">按品类</div><div class="bar-list" id="ps_barCategory"></div></div>
-            <div class="card"><div class="card-title">按状态</div><div class="bar-list" id="ps_barStatus"></div></div>
-            <div class="card"><div class="card-title">按进度</div><div class="bar-list" id="ps_barProgress"></div></div>
-            <div class="card"><div class="card-title">按责任人</div><div class="bar-list" id="ps_barOwner"></div></div>
-          </div>
-          <div class="table-wrap" style="margin-top:16px">
-            <table class="data-table">
-              <thead>
-                <tr><th>序号</th><th>品类</th><th>专项名称</th><th>立项</th><th>P1</th><th>P2</th><th>P3</th><th>状态</th><th>责任人</th></tr>
-              </thead>
-              <tbody id="ps_recentBody"></tbody>
-            </table>
-            <div class="empty" id="ps_recentEmpty" style="display:none">
-              <div class="big">🔬</div>
-              <div>暂无预研专项数据</div>
-            </div>
-          </div>
-        </div>
       </section>
     </main>
   </div>
@@ -193,7 +171,7 @@
         </div>
         <div class="form-item half">
           <label>供应商</label>
-          <input id="f_supplier" list="pSupList" placeholder="供应商名称">
+          <input id="f_supplier" list="pSupList" placeholder="供应商">
           <datalist id="pSupList"></datalist>
         </div>
         <div class="form-item half">
@@ -218,6 +196,5 @@
   <div id="toast"></div>
   <script src="js/common.js"></script>
   <script src="js/projects.js"></script>
-  <script src="js/projects-prestudy.js"></script>
 </body>
 </html>

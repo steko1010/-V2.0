@@ -47,6 +47,36 @@
           <button class="btn" onclick="applyFilters()">查询</button>
           <button class="btn" onclick="resetFilters()">重置</button>
         </div>
+        <div class="toolbar">
+          <select id="filterManufacturer"><option value="">全部制造商</option></select>
+          <select id="filterAppliedBy"><option value="">全部申请人</option></select>
+          <select id="filterExpiring">
+            <option value="">全部到期情况</option>
+            <option value="30">30 天内到期</option>
+            <option value="60">60 天内到期</option>
+            <option value="90">90 天内到期</option>
+            <option value="expired">已过期</option>
+            <option value="none">未填到期日</option>
+          </select>
+          <select id="filterRohs"><option value="">ROHS 全部</option></select>
+          <select id="filterReach"><option value="">REACH 全部</option></select>
+          <select id="filterMsds"><option value="">MSDS 全部</option></select>
+          <select id="filterDatasheet"><option value="">规格书 全部</option></select>
+          <select id="sortBy">
+            <option value="">默认排序</option>
+            <option value="code">按编码</option>
+            <option value="name">按名称</option>
+            <option value="category">按分类</option>
+            <option value="supplier">按供应商</option>
+            <option value="status">按认证状态</option>
+            <option value="cert_expire_date">按认证到期</option>
+            <option value="created_at">按录入时间</option>
+          </select>
+          <select id="sortOrder">
+            <option value="asc">升序</option>
+            <option value="desc">降序</option>
+          </select>
+        </div>
         <div class="table-wrap">
           <table class="data-table" id="materialTable">
             <thead>
@@ -92,7 +122,7 @@
         </div>
         <div class="form-item half">
           <label>供应商</label>
-          <input id="f_supplier" list="supList" placeholder="供应商名称">
+          <input id="f_supplier" list="supList" placeholder="供应商">
           <datalist id="supList"></datalist>
         </div>
         <div class="form-item half">

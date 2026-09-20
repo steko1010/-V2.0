@@ -22,6 +22,18 @@ async function loadPrestudies(page = 1) {
   try {
     const params = new URLSearchParams({ page, pageSize: PRE_PAGE_SIZE });
     if (keyword) params.set('keyword', keyword);
+    // 高级筛选：品类 / 供应商 / 状态 / 责任人 / 录入时间范围
+    const setParam = (key, id) => {
+      const el = document.getElementById(id);
+      const v = el ? String(el.value || '').trim() : '';
+      if (v) params.set(key, v);
+    };
+    setParam('category', 'filterCategory');
+    setParam('supplier', 'filterSupplier');
+    setParam('status', 'filterStatus');
+    setParam('owner', 'filterOwner');
+    setParam('dateFrom', 'filterDateFrom');
+    setParam('dateTo', 'filterDateTo');
     const res = await fetch('/api/prestudies?' + params.toString());
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || '加载失败');
@@ -54,6 +66,7 @@ function renderPrestudies(total, pages) {
       <td><input type="checkbox" class="pre-check" value="${r.id}"></td>
       <td>${(prePage - 1) * PRE_PAGE_SIZE + i + 1}</td>
       <td>${preBadge(r.category)}</td>
+      <td>${esc(r.supplier) || '-'}</td>
       <td><b>${esc(r.topic)}</b></td>
       <td>${esc(r.milestone_lx) || '-'}</td>
       <td>${esc(r.milestone_p1) || '-'}</td>
@@ -97,7 +110,9 @@ function preBadge(cat) {
 }
 
 function resetPrestudies() {
-  document.getElementById('pKeyword').value = '';
+  for (const id of ['pKeyword', 'filterCategory', 'filterSupplier', 'filterStatus', 'filterOwner', 'filterDateFrom', 'filterDateTo']) {
+    document.getElementById(id).value = '';
+  }
   loadPrestudies(1);
 }
 
@@ -108,6 +123,7 @@ function openPrestudyModal(id) {
   editingId = id || null;
   document.getElementById('prestudyModalTitle').textContent = id ? '编辑预研专项' : '新增预研专项';
   document.getElementById('f_category').value = '';
+  document.getElementById('f_supplier').value = '';
   document.getElementById('f_topic').value = '';
   document.getElementById('f_risk').value = '';
   document.getElementById('f_milestone_lx').value = '';
@@ -120,6 +136,7 @@ function openPrestudyModal(id) {
     const r = preList.find((x) => x.id === id);
     if (r) {
       setCategoryValue('f_category', r.category || '');
+      document.getElementById('f_supplier').value = r.supplier || '';
       document.getElementById('f_topic').value = r.topic || '';
       document.getElementById('f_risk').value = r.risk || '';
       document.getElementById('f_milestone_lx').value = r.milestone_lx || '';
@@ -140,6 +157,7 @@ function closePrestudyModal() {
 async function savePrestudy() {
   const payload = {
     category: document.getElementById('f_category').value,
+    supplier: document.getElementById('f_supplier').value.trim(),
     topic: document.getElementById('f_topic').value.trim(),
     risk: document.getElementById('f_risk').value.trim(),
     milestone_lx: document.getElementById('f_milestone_lx').value.trim(),
@@ -236,9 +254,9 @@ async function loadPrestudyStats() {
     document.getElementById('st_paused').textContent =
       find(s.byStatus, '暂停') + find(s.byStatus, '搁置') + find(s.byStatus, '风险');
     renderBars('barCategory', s.byCategory || [], '#2563eb');
-    renderBars('barStatus', s.byStatus || [], '#16a34a');
-    renderBars('barProgress', s.byProgress || [], '#d97706');
+    renderBars('barSupplier', s.bySupplier || [], '#0891b2');
     renderBars('barOwner', s.byOwner || [], '#7c3aed');
+    renderBars('barStatus', s.byStatus || [], '#16a34a');
     renderRecent(s.recent || []);
   } catch (e) {
     toast(e.message, 'error');
@@ -295,7 +313,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     requiredLabel: '专项名称',
     refresh: () => loadPrestudies(1),
     fields: [
-      ['物料品类', 'category'], ['专项名称', 'topic'], ['风险', 'risk'],
+      ['物料品类', 'category'], ['供应商', 'supplier'], ['专项名称', 'topic'], ['风险', 'risk'],
       ['立项', 'milestone_lx'], ['P1', 'milestone_p1'], ['P2', 'milestone_p2'], ['P3', 'milestone_p3'],
       ['状态', 'status'], ['责任人', 'owner'],
     ],
@@ -304,5 +322,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.addEventListener('click', () => switchPrestudyTab(btn.dataset.tab));
   });
   await renderCategoryOptions('f_category', '请选择');
+  // 列表筛选下拉：品类 / 供应商 / 状态 / 责任人
+  await renderCategoryOptions('filterCategory', '全部品类');
+  await Promise.all([
+    renderMetaOptions('filterSupplier', 'suppliers', '全部供应商'),
+    renderMetaOptions('filterStatus', 'prestudyStatuses', '全部状态'),
+    renderMetaOptions('filterOwner', 'owners', '全部责任人'),
+  ]);
   loadPrestudies(1);
 });

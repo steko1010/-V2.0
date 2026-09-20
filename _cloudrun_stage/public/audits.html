@@ -66,6 +66,10 @@
             <option value="有条件合格">有条件合格</option>
             <option value="不合格">不合格</option>
           </select>
+          <select id="filterSupplier"><option value="">全部供应商</option></select>
+          <select id="filterAuditor"><option value="">全部稽核人员</option></select>
+          <input type="date" id="filterDateFrom" title="稽核日期起">
+          <input type="date" id="filterDateTo" title="稽核日期止">
           <button class="btn" onclick="loadAudits(1)">查询</button>
           <button class="btn" onclick="resetAudits()">重置</button>
         </div>

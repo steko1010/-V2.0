@@ -72,6 +72,16 @@ async function loadSuppliers(keepPage) {
   const params = new URLSearchParams();
   if (keyword) params.set('keyword', keyword);
   if (materialType) params.set('materialType', materialType);
+  // 高级筛选：合作状态 / 评级 / 录入时间范围
+  const setParam = (key, id) => {
+    const el = document.getElementById(id);
+    const v = el ? String(el.value || '').trim() : '';
+    if (v) params.set(key, v);
+  };
+  setParam('status', 'filterStatus');
+  setParam('rating', 'filterRating');
+  setParam('dateFrom', 'filterDateFrom');
+  setParam('dateTo', 'filterDateTo');
   const qs = params.toString();
   const data = await apiGet('/api/suppliers' + (qs ? `?${qs}` : ''));
   supplierItems = data.items || [];
@@ -143,8 +153,9 @@ function renderSuppliers() {
 }
 
 function resetSuppliers() {
-  document.getElementById('keyword').value = '';
-  document.getElementById('materialTypeFilter').value = '';
+  for (const id of ['keyword', 'materialTypeFilter', 'filterStatus', 'filterRating', 'filterDateFrom', 'filterDateTo']) {
+    document.getElementById(id).value = '';
+  }
   loadSuppliers();
 }
 
@@ -362,6 +373,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   await renderCategoryOptions('materialTypeFilter', '全部物料品类');
   await renderCategoryOptions('f_material_type', '请选择');
+  // 列表筛选下拉：合作状态 / 评级（业务枚举）
+  await Promise.all([
+    renderMetaOptions('filterStatus', 'supplierStatuses', '全部合作状态'),
+    renderMetaOptions('filterRating', 'supplierRatings', '全部评级'),
+  ]);
   loadSuppliers();
   loadStats();
 });

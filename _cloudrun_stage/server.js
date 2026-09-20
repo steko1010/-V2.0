@@ -92,14 +92,43 @@ app.use(session({
 }));
 
 if (SERVE_STATIC) {
-  // 单机模式：本服务托管前端页面（public 目录）
+  // 单机模式：本服务托管前端页面（public 目录，旧版多页）
   app.use(express.static(path.join(__dirname, 'public')));
+
+  // React SPA（frontend/ 构建产物）挂载在 /app 前缀下；渐进迁移期间与新/旧页面并存
+  const feDist = path.join(__dirname, 'frontend', 'dist');
+  if (fs.existsSync(feDist)) {
+    app.use('/app', express.static(feDist));
+    // history 路由回退到 SPA 入口
+    app.get('/app/*', (req, res) => res.sendFile(path.join(feDist, 'index.html')));
+    app.get('/app', (req, res) => res.redirect('/app/'));
+  }
 }
 // 附件上传目录静态托管（前后端分离部署时同样由本服务提供，Nginx 反代 /uploads）
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ---------- 工具函数 ----------
+
+// ---------- 列表筛选通用工具（各业务列表页的高级筛选共用） ----------
+
+// 日期范围筛选：起止可只填其一；日期列为 TEXT（YYYY-MM-DD 或含时分秒），统一按前 10 位比较
+function dateRangeClause(field, from, to) {
+  const parts = [];
+  const params = [];
+  const f = String(from === undefined || from === null ? '' : from).trim();
+  const t = String(to === undefined || to === null ? '' : to).trim();
+  if (f) { parts.push(`substr(IFNULL(${field}, ''), 1, 10) >= ?`); params.push(f); }
+  if (t) { parts.push(`substr(IFNULL(${field}, ''), 1, 10) <= ?`); params.push(t); }
+  return { parts, params };
+}
+
+// 排序：字段名走白名单映射，方向仅允许 ASC / DESC，避免拼接注入
+function orderClause(sortBy, order, allowed, fallback = 'id ASC') {
+  const key = allowed[String(sortBy || '')];
+  if (!key) return fallback;
+  return `${key} ${String(order || '').toLowerCase() === 'desc' ? 'DESC' : 'ASC'}`;
+}
 
 function cleanRow(row) {
   if (!row) return null;
@@ -257,23 +286,41 @@ function sendXlsx(res, buf, fileName) {
 }
 
 // 通用批量导入路由：POST /api/{table}/batch，body 为 [{字段:值},...] 或 {items:[...]}
-function batchInsertRoute(table, fields, pick, mustField) {
+// extraFn(req)：可选，按请求补写 pick 之外的固定列（如 prestudies.kind 归属清单）
+// 去重口径：同一对象（项目 / 专项 / 物料…）允许多条记录（一个项目会有多条风险点、多条信息），
+// 逐条入库；只有「所有导入列内容完全一致」的行才算重复 —— 文件内重复合并为一条、
+// 与库中已有记录重复则跳过，均计入 skipped，绝不覆盖或删除已有数据。
+function batchInsertRoute(table, fields, pick, mustField, extraFn) {
   return (req, res, next) => {
     try {
       const items = Array.isArray(req.body) ? req.body : ((req.body && req.body.items) || []);
       if (!items.length) return res.status(400).json({ message: '没有可导入的数据' });
+      const extra = (extraFn ? extraFn(req) : null) || {};
+      const cols = fields.concat(Object.keys(extra));
       const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
       const insert = db.prepare(
-        `INSERT INTO ${table} (${fields.join(',')}, created_at, updated_at) VALUES (${fields.map(() => '?').join(',')}, ?, ?)`
+        `INSERT INTO ${table} (${cols.join(',')}, created_at, updated_at) VALUES (${cols.map(() => '?').join(',')}, ?, ?)`
       );
-      const results = { success: 0, errors: [] };
+      const text = (v) => String(v === undefined || v === null ? '' : v).trim();
+      // 比较维度 = 导入列 + 固定列（如 kind），同名不同清单的两条记录互不算重复
+      const keyOf = (row) => cols.map((k) => text(row[k])).join('\u0001');
+      const existed = new Set();
+      try {
+        db.prepare(`SELECT ${cols.join(',')} FROM ${table}`).all().forEach((r) => existed.add(keyOf(r)));
+      } catch (e) { /* 老库缺列等异常时退化为不去重，保证导入可用 */ }
+      const results = { success: 0, skipped: 0, errors: [] };
       db.exec('BEGIN');
       try {
         for (const [i, raw] of items.entries()) {
           try {
             const data = pick(raw || {});
             if (mustField && !data[mustField]) throw new Error(`缺少必填字段「${mustField}」`);
-            insert.run(...fields.map((k) => (data[k] === undefined || data[k] === null ? '' : data[k])), now, now);
+            const row = {};
+            cols.forEach((k) => { row[k] = data[k] !== undefined ? data[k] : extra[k]; });
+            const key = keyOf(row);
+            if (existed.has(key)) { results.skipped++; continue; }   // 内容完全重复 → 合并/跳过
+            existed.add(key);                                        // 同一文件内后续重复行同样跳过
+            insert.run(...cols.map((k) => (row[k] === undefined || row[k] === null ? '' : row[k])), now, now);
             results.success++;
           } catch (e) {
             results.errors.push({ row: raw, rowIndex: i + 2, message: e.message || '数据格式错误' });
@@ -390,14 +437,32 @@ function ensureUserRole(username, displayName) {
   return role.id;
 }
 
+// 用户列表（支持关键词 / 状态 / 角色筛选）
 app.get('/api/users', requireAuth, requirePermission('page:admin'), (req, res) => {
+  const q = req.query || {};
+  const keyword = String(q.keyword || '').trim();
+  const status = String(q.status || '').trim();
+  const role = String(q.role || '').trim();
+  const where = [];
+  const params = [];
+  if (keyword) {
+    where.push('(u.username LIKE ? OR u.display_name LIKE ?)');
+    params.push(`%${keyword}%`, `%${keyword}%`);
+  }
+  if (status) { where.push('u.status = ?'); params.push(status); }
+  if (role) {
+    where.push('EXISTS (SELECT 1 FROM user_roles ur2 LEFT JOIN roles r2 ON r2.id = ur2.role_id WHERE ur2.user_id = u.id AND (r2.name = ? OR r2.code = ?))');
+    params.push(role, role);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const rows = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.status, u.is_super, u.created_at,
       GROUP_CONCAT(r.name) AS roles
     FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
+    ${whereSql}
     GROUP BY u.id ORDER BY u.id
-  `).all();
+  `).all(...params);
   const items = rows.map((u) => ({
     ...u,
     scopes: {
@@ -592,20 +657,64 @@ app.use('/api', (req, res, next) => {
 
 // ---------- 物料 CRUD ----------
 
-// 列表：搜索 + 筛选 + 分页
-app.get('/api/materials', (req, res) => {
-  const { keyword, category, status, supplier, page = 1, pageSize = 20 } = req.query;
+// 物料列表与导出共用的筛选条件（列表页高级筛选）
+// 支持参数：keyword、category、status、supplier、manufacturer、applied_by、
+//   expiring=30|60|90|expired|none（认证到期）、rohs/reach/msds/datasheet（资料状态）
+const MATERIAL_SORT_FIELDS = {
+  code: 'code', name: 'name', category: 'category', supplier: 'supplier',
+  manufacturer: 'manufacturer', status: 'status', cert_expire_date: 'cert_expire_date',
+  applied_by: 'applied_by', created_at: 'created_at',
+};
+
+function buildMaterialWhere(req) {
+  const q = req.query || {};
   const where = [];
   const params = [];
 
+  const keyword = String(q.keyword || '').trim();
   if (keyword) {
     const k = `%${keyword}%`;
     where.push('(code LIKE ? OR name LIKE ? OR model LIKE ? OR supplier LIKE ? OR manufacturer LIKE ?)');
     params.push(k, k, k, k, k);
   }
-  if (category) { where.push('category = ?'); params.push(category); }
-  if (status) { where.push('status = ?'); params.push(status); }
-  if (supplier) { where.push('supplier = ?'); params.push(supplier); }
+  const eq = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  const like = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} LIKE ?`); params.push(`%${v}%`); }
+  };
+  eq('category', q.category);
+  eq('status', q.status);
+  eq('supplier', q.supplier);
+  like('manufacturer', q.manufacturer);
+  like('applied_by', q.applied_by);
+  // 资料状态：ROHS / REACH / MSDS / 规格书
+  for (const d of DOCS) eq(d, q[d]);
+  // 认证到期：30/60/90 天内临期、已过期、未填写到期日
+  const expiring = String(q.expiring || '').trim();
+  if (expiring && expiring !== 'all') {
+    const today = new Date().toISOString().slice(0, 10);
+    if (['30', '60', '90'].includes(expiring)) {
+      where.push(`cert_expire_date != '' AND substr(cert_expire_date, 1, 10) >= ? AND substr(cert_expire_date, 1, 10) <= date(?, '+${expiring} day')`);
+      params.push(today, today);
+    } else if (expiring === 'expired') {
+      where.push(`cert_expire_date != '' AND substr(cert_expire_date, 1, 10) < ?`);
+      params.push(today);
+    } else if (expiring === 'none') {
+      where.push(`(cert_expire_date = '' OR cert_expire_date IS NULL)`);
+    }
+  }
+  return { where, params };
+}
+
+// 列表：搜索 + 筛选 + 排序 + 分页
+app.get('/api/materials', (req, res) => {
+  const { page = 1, pageSize = 20 } = req.query;
+  const built = buildMaterialWhere(req);
+  const where = built.where.slice();
+  const params = built.params.slice();
 
   // 第三层：按用户可见品类 / 供应商过滤
   const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
@@ -616,9 +725,10 @@ app.get('/api/materials', (req, res) => {
   const ps = Math.max(1, Math.min(100, parseInt(pageSize, 10) || 20));
   const offset = (p - 1) * ps;
 
+  const orderSql = orderClause(req.query.sortBy, req.query.order, MATERIAL_SORT_FIELDS, 'id ASC');
   const total = db.prepare(`SELECT COUNT(*) AS c FROM materials ${whereSql}`).get(...params).c;
   const rows = db.prepare(
-    `SELECT * FROM materials ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`
+    `SELECT * FROM materials ${whereSql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`
   ).all(...params, ps, offset);
 
   res.json({ total, page: p, pageSize: ps, items: rows });
@@ -682,22 +792,16 @@ app.post('/api/materials/batch', requirePermission('action:import'), (req, res, 
 // 物料台账导出（支持与列表一致的筛选：keyword / category / status / supplier）
 app.get('/api/materials/export', requirePermission('action:export'), (req, res, next) => {
   try {
-    const { keyword, category, status, supplier } = req.query;
-    const where = [];
-    const params = [];
-    if (keyword) {
-      const k = `%${keyword}%`;
-      where.push('(code LIKE ? OR name LIKE ? OR model LIKE ? OR supplier LIKE ? OR manufacturer LIKE ?)');
-      params.push(k, k, k, k, k);
-    }
-    if (category) { where.push('category = ?'); params.push(category); }
-    if (status) { where.push('status = ?'); params.push(status); }
-    if (supplier) { where.push('supplier = ?'); params.push(supplier); }
+    // 导出与列表保持同一套筛选条件（含制造商 / 申请人 / 到期临期 / 资料状态）
+    const built = buildMaterialWhere(req);
+    const where = built.where.slice();
+    const params = built.params.slice();
     // 按用户可见品类 / 供应商过滤
     const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
     if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const rows = db.prepare(`SELECT * FROM materials ${whereSql} ORDER BY id ASC`).all(...params);
+    const orderSql = orderClause(req.query.sortBy, req.query.order, MATERIAL_SORT_FIELDS, 'id ASC');
+    const rows = db.prepare(`SELECT * FROM materials ${whereSql} ORDER BY ${orderSql}`).all(...params);
     const headers = ['编码', '物料名称', '型号规格', '分类', '供应商', '制造商', '认证状态', '认证到期', 'ROHS', 'REACH', '申请人'];
     const fields = ['code', 'name', 'model', 'category', 'supplier', 'manufacturer', 'status', 'cert_expire_date', 'rohs', 'reach', 'applied_by'];
     const aoa = [headers];
@@ -874,7 +978,6 @@ app.get('/api/stats', (req, res, next) => {
 app.get('/api/meta', (req, res) => {
   // 品类下拉库：统一以品类管理（material_categories）维护的「物料中类」为数据源。
   // 品类管理页维护后，物料汇总 / 选型 / 预研 / 稽核 / 供应商 / QCP / 项目 的品类下拉自动同步。
-  const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
   let categories = [];
   try {
     if (req.user.isSuper || !(req.user.scopes && req.user.scopes.categories && req.user.scopes.categories.length)) {
@@ -890,10 +993,47 @@ app.get('/api/meta', (req, res) => {
     categories = [];
   }
   categories.sort((a, b) => a.localeCompare(b, 'zh'));
+  // 供应商下拉库：统一以「供应商信息」页（suppliers 表）维护的供应商为数据源。
+  // 该页新增 / 删除 / 导入后前端会调用 useMeta().refresh()，各页面供应商下拉即自动同步。
+  const supplierScope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'name', allowAllWhenEmpty: true });
   const suppliers = db.prepare(
-    `SELECT DISTINCT supplier FROM materials WHERE supplier != ''${scope.where} ORDER BY supplier`
-  ).all(...scope.params).map((r) => r.supplier);
-  res.json({ statuses: STATUSES, docStatuses: DOC_STATUSES, categories, suppliers });
+    `SELECT DISTINCT name FROM suppliers WHERE TRIM(IFNULL(name, '')) != ''${supplierScope.where}`
+  ).all(...supplierScope.params).map((r) => r.name).sort((a, b) => a.localeCompare(b, 'zh'));
+  // 列表高级筛选下拉数据源：从各业务表按用户可见范围取 DISTINCT 值，避免下拉缺项
+  const distinct = (table, col, scope) => {
+    try {
+      return db.prepare(
+        `SELECT DISTINCT ${col} AS v FROM ${table} WHERE TRIM(IFNULL(${col}, '')) != ''${scope.where}`
+      ).all(...scope.params).map((r) => r.v).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh'));
+    } catch (e) { return []; }
+  };
+  const matScope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
+  const proScope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
+  const preScope = scopeWhere(req, { categoryField: 'category', allowAllWhenEmpty: true });
+  const audScope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'supplier', allowAllWhenEmpty: true });
+  const qcpScope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
+
+  res.json({
+    statuses: STATUSES, docStatuses: DOC_STATUSES, categories, suppliers,
+    // 物料汇总表：制造商 / 申请人
+    manufacturers: distinct('materials', 'manufacturer', matScope),
+    appliedBy: distinct('materials', 'applied_by', matScope),
+    // 项目（预研 / 在研）：状态 / 责任人
+    prestudyStatuses: distinct('prestudies', 'status', preScope),
+    owners: distinct('prestudies', 'owner', preScope),
+    // BOM 信息：流程 / 来源
+    projectFlows: distinct('projects', 'flow', proScope),
+    projectSources: distinct('projects', 'source', proScope),
+    // 稽核：结果 / 稽核人员
+    auditResults: distinct('audits', 'result', audScope),
+    auditors: distinct('audits', 'auditor', audScope),
+    // 关键工艺：供应商 / 责任人
+    qcpSuppliers: distinct('qcps', 'supplier', qcpScope),
+    qcpResponsibles: distinct('qcps', 'responsible', qcpScope),
+    // 供应商：合作状态 / 评级（业务枚举）
+    supplierStatuses: ['合作中', '暂停', '淘汰'],
+    supplierRatings: ['A', 'B', 'C', 'D'],
+  });
 });
 
 // 新增品类（分类下拉可动态添加）
@@ -1079,19 +1219,41 @@ function pickProject(body, { partial = false } = {}) {
   return out;
 }
 
-// BOM信息列表（支持搜索）
-app.get('/api/projects', (req, res) => {
-  const { keyword, supplier, category } = req.query;
+// BOM信息列表与导出共用的筛选条件：关键词 / 供应商 / 品类 / 流程 / 来源 / 录入时间范围
+const PROJECT_SORT_FIELDS = {
+  project_name: 'project_name', supplier: 'supplier', category: 'category',
+  flow: 'flow', source: 'source', created_at: 'created_at',
+};
+
+function buildProjectWhere(req) {
+  const q = req.query || {};
   const where = [];
   const params = [];
+  const keyword = String(q.keyword || '').trim();
   if (keyword) {
     const k = `%${keyword}%`;
     const searchCols = ['project_name', 'supplier', 'category', 'flow', ...PROJECT_SPEC_FIELDS.map(([, f]) => f)];
     where.push(`(${searchCols.map((c) => `${c} LIKE ?`).join(' OR ')})`);
     searchCols.forEach(() => params.push(k));
   }
-  if (supplier) { where.push('supplier = ?'); params.push(supplier); }
-  if (category) { where.push('category = ?'); params.push(category); }
+  const eq = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eq('supplier', q.supplier);
+  eq('category', q.category);
+  eq('flow', q.flow);
+  eq('source', q.source);
+  const range = dateRangeClause('created_at', q.dateFrom, q.dateTo);
+  if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
+  return { where, params };
+}
+
+// BOM信息列表（支持搜索 + 筛选 + 排序 + 分页）
+app.get('/api/projects', (req, res) => {
+  const built = buildProjectWhere(req);
+  const where = built.where.slice();
+  const params = built.params.slice();
   // 第三层：按用户可见品类 / 供应商过滤
   const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -1101,8 +1263,9 @@ app.get('/api/projects', (req, res) => {
   const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 5));
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+  const orderSql = orderClause(req.query.sortBy, req.query.order, PROJECT_SORT_FIELDS, 'id ASC');
   const rows = db.prepare(
-    `SELECT * FROM projects ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`
+    `SELECT * FROM projects ${whereSql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`
   ).all(...params, pageSize, (page - 1) * pageSize);
   res.json({ total, page, pageSize, pages, items: rows });
 });
@@ -1110,22 +1273,16 @@ app.get('/api/projects', (req, res) => {
 // 批量导出BOM信息（Excel）
 app.get('/api/projects/export', requirePermission('action:export'), (req, res, next) => {
   try {
-    const { keyword, supplier, category } = req.query;
-    const where = [];
-    const params = [];
-    if (keyword) {
-      const k = `%${keyword}%`;
-      const searchCols = ['project_name', 'supplier', 'category', 'flow', ...PROJECT_SPEC_FIELDS.map(([, f]) => f)];
-      where.push(`(${searchCols.map((c) => `${c} LIKE ?`).join(' OR ')})`);
-      searchCols.forEach(() => params.push(k));
-    }
-    if (supplier) { where.push('supplier = ?'); params.push(supplier); }
-    if (category) { where.push('category = ?'); params.push(category); }
+    // 导出与列表保持同一套筛选条件（含流程 / 来源 / 录入时间范围）
+    const built = buildProjectWhere(req);
+    const where = built.where.slice();
+    const params = built.params.slice();
     // 第三层：按用户可见品类 / 供应商过滤
     const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
     if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const rows = db.prepare(`SELECT * FROM projects ${whereSql} ORDER BY id ASC`).all(...params);
+    const orderSql = orderClause(req.query.sortBy, req.query.order, PROJECT_SORT_FIELDS, 'id ASC');
+    const rows = db.prepare(`SELECT * FROM projects ${whereSql} ORDER BY ${orderSql}`).all(...params);
     const XLSX = require('xlsx');
     const headers = ['项目名称', '供应商', '品类', '流程', '来源', '录入时间', ...PROJECT_SPEC_FIELDS.map(([label]) => label)];
     const aoa = [headers];
@@ -1380,7 +1537,7 @@ app.post('/api/projects/extract', requirePermission('action:create'), async (req
 
 // ================= 预研专项 =================
 
-const PRESTUDY_FIELDS = ['category', 'topic', 'risk', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'];
+const PRESTUDY_FIELDS = ['category', 'supplier', 'topic', 'risk', 'progress', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'];
 
 function pickPrestudy(body, { partial = false } = {}) {
   const out = {};
@@ -1397,18 +1554,51 @@ function pickPrestudy(body, { partial = false } = {}) {
   return out;
 }
 
+// 记录归属清单：'' = 预研专项（默认）；'research' = 在研项目（风险清单，一行 = 一个风险点）
+// 「一、在研项目」与「二、预研专项」是两份独立清单，共用 prestudies 表、靠 kind 区分；
+// 新增 / 导入时按所在标签页写入，列表 / 导出 / 看板按 kind 过滤，避免互相串数据。
+const PRESTUDY_KIND_RESEARCH = 'research';
+
+function prestudyKind(value) {
+  return String(value == null ? '' : value).trim() === PRESTUDY_KIND_RESEARCH ? PRESTUDY_KIND_RESEARCH : '';
+}
+
+// kind 过滤条件：'research' 只看在研项目、'all' 看全部，其余（含默认）只看预研专项
+// 老库空值按预研专项处理；比较值取自代码常量、不来自请求，直接拼接安全
+function prestudyKindWhere(req) {
+  const kind = String((req && req.query && req.query.kind) || '').trim();
+  if (kind === 'all') return { where: '' };
+  if (kind === PRESTUDY_KIND_RESEARCH) return { where: ` AND COALESCE(kind,'') = '${PRESTUDY_KIND_RESEARCH}'` };
+  return { where: ` AND COALESCE(kind,'') <> '${PRESTUDY_KIND_RESEARCH}'` };
+}
+
 // 预研专项列表（支持搜索）
 app.get('/api/prestudies', (req, res, next) => {
   try {
-    const { keyword } = req.query;
+    const q = req.query || {};
+    const keyword = String(q.keyword || '').trim();
     const where = [];
     const params = [];
     if (keyword) {
       const k = `%${keyword}%`;
-      const searchCols = ['category', 'topic', 'risk', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'];
+      const searchCols = ['category', 'supplier', 'topic', 'risk', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'];
       where.push(`(${searchCols.map((c) => `${c} LIKE ?`).join(' OR ')})`);
       searchCols.forEach(() => params.push(k));
     }
+    // 高级筛选：品类 / 供应商 / 状态 / 责任人 / 立项时间范围
+    const eq = (field, val) => {
+      const v = String(val === undefined || val === null ? '' : val).trim();
+      if (v) { where.push(`${field} = ?`); params.push(v); }
+    };
+    eq('category', q.category);
+    eq('supplier', q.supplier);
+    eq('status', q.status);
+    eq('owner', q.owner);
+    const range = dateRangeClause('created_at', q.dateFrom, q.dateTo);
+    if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
+    // 归属清单：默认只返回预研专项；「一、在研项目」传 kind=research
+    const kindW = prestudyKindWhere(req);
+    if (kindW.where) where.push(kindW.where.replace(/^ AND /, ''));
     // 第三层：按用户可见品类过滤
     const scope = scopeWhere(req, { categoryField: 'category', allowAllWhenEmpty: true });
     if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -1428,6 +1618,8 @@ app.get('/api/prestudies', (req, res, next) => {
 app.post('/api/prestudies', requirePermission('action:create'), (req, res, next) => {
   try {
     const data = pickPrestudy(req.body);
+    // 归属清单由所在标签页决定：在研项目 → 'research'，预研专项 → ''
+    data.kind = prestudyKind(req.body && req.body.kind);
     data.source = String(req.body.source || '').trim() === '文档导入' ? '文档导入' : '手动';
     data.created_at = data.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const keys = Object.keys(data);
@@ -1468,39 +1660,59 @@ app.delete('/api/prestudies/:id', requirePermission('action:delete'), (req, res,
 // 预研专项批量导入 / 导出（模板列 = 展示列表表头）
 app.post('/api/prestudies/batch', requirePermission('action:import'), batchInsertRoute(
   'prestudies',
-  ['category', 'topic', 'risk', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'],
-  pickPrestudy, 'topic'
+  ['category', 'supplier', 'topic', 'risk', 'progress', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'],
+  pickPrestudy, 'topic',
+  // 导入到哪个清单由发起导入的标签页决定（前端 body.kind）
+  (req) => ({ kind: prestudyKind(req.body && req.body.kind) })
 ));
 app.get('/api/prestudies/export', requirePermission('action:export'), exportRoute(
   'prestudies', '预研专项',
-  ['物料品类', '专项名称', '风险', '立项', 'P1', 'P2', 'P3', '状态', '责任人'],
-  ['category', 'topic', 'risk', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'],
-  (req) => scopeWhere(req, { categoryField: 'category', allowAllWhenEmpty: true })
+  ['物料品类', '供应商', '专项名称', '风险', '立项', 'P1', 'P2', 'P3', '状态', '责任人'],
+  ['category', 'supplier', 'topic', 'risk', 'milestone_lx', 'milestone_p1', 'milestone_p2', 'milestone_p3', 'status', 'owner'],
+  (req) => {
+    const scope = scopeWhere(req, { categoryField: 'category', allowAllWhenEmpty: true });
+    return { where: scope.where + prestudyKindWhere(req).where, params: scope.params };
+  }
 ));
 
 app.get('/api/prestudies/stats', (req, res, next) => {
   try {
     const scope = scopeWhere(req, { categoryField: 'category', allowAllWhenEmpty: true });
-    const total = db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE 1=1${scope.where}`).get(...scope.params).c;
+    // 统计范围：默认预研专项；?kind=research 看在研项目（风险清单）、?kind=all 看全部
+    const whereAll = scope.where + prestudyKindWhere(req).where;
+    const total = db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE 1=1${whereAll}`).get(...scope.params).c;
     const byCategory = db.prepare(
-      `SELECT category AS name, COUNT(*) AS value FROM prestudies WHERE category != ''${scope.where} GROUP BY category ORDER BY value DESC`
+      `SELECT category AS name, COUNT(*) AS value FROM prestudies WHERE category != ''${whereAll} GROUP BY category ORDER BY value DESC`
     ).all(...scope.params);
     const byStatus = db.prepare(
-      `SELECT status AS name, COUNT(*) AS value FROM prestudies WHERE status != ''${scope.where} GROUP BY status ORDER BY value DESC`
+      `SELECT status AS name, COUNT(*) AS value FROM prestudies WHERE status != ''${whereAll} GROUP BY status ORDER BY value DESC`
     ).all(...scope.params);
     const byProgress = [
-      { name: '立项', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_lx != ''${scope.where}`).get(...scope.params).c },
-      { name: 'P1', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_p1 != ''${scope.where}`).get(...scope.params).c },
-      { name: 'P2', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_p2 != ''${scope.where}`).get(...scope.params).c },
-      { name: 'P3', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_p3 != ''${scope.where}`).get(...scope.params).c },
+      { name: '立项', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_lx != ''${whereAll}`).get(...scope.params).c },
+      { name: 'P1', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_p1 != ''${whereAll}`).get(...scope.params).c },
+      { name: 'P2', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_p2 != ''${whereAll}`).get(...scope.params).c },
+      { name: 'P3', value: db.prepare(`SELECT COUNT(*) AS c FROM prestudies WHERE milestone_p3 != ''${whereAll}`).get(...scope.params).c },
     ];
     const byOwner = db.prepare(
-      `SELECT owner AS name, COUNT(*) AS value FROM prestudies WHERE owner != ''${scope.where} GROUP BY owner ORDER BY value DESC LIMIT 10`
+      `SELECT owner AS name, COUNT(*) AS value FROM prestudies WHERE owner != ''${whereAll} GROUP BY owner ORDER BY value DESC LIMIT 10`
     ).all(...scope.params);
+    const bySupplier = db.prepare(
+      `SELECT supplier AS name, COUNT(*) AS value FROM prestudies WHERE supplier != ''${whereAll} GROUP BY supplier ORDER BY value DESC LIMIT 10`
+    ).all(...scope.params);
+    // 按项目统计「问题个数」：一个项目可登记多条风险点（一行 = 一个问题），逐条计数 —— 不做项目级合并
+    const byTopic = db.prepare(
+      `SELECT topic AS name, COUNT(*) AS value FROM prestudies WHERE topic != '' AND TRIM(IFNULL(risk, '')) != ''${whereAll} GROUP BY topic ORDER BY value DESC, name ASC LIMIT 15`
+    ).all(...scope.params);
+    const issueTotal = db.prepare(
+      `SELECT COUNT(*) AS c FROM prestudies WHERE TRIM(IFNULL(risk, '')) != ''${whereAll}`
+    ).get(...scope.params).c;
+    const projectTotal = db.prepare(
+      `SELECT COUNT(DISTINCT topic) AS c FROM prestudies WHERE topic != ''${whereAll}`
+    ).get(...scope.params).c;
     const recent = db.prepare(
-      `SELECT id, category, topic, milestone_lx, milestone_p1, milestone_p2, milestone_p3, status, owner FROM prestudies WHERE 1=1${scope.where} ORDER BY id DESC LIMIT 8`
+      `SELECT id, category, topic, milestone_lx, milestone_p1, milestone_p2, milestone_p3, status, owner FROM prestudies WHERE 1=1${whereAll} ORDER BY id DESC LIMIT 8`
     ).all(...scope.params);
-    res.json({ total, byCategory, byStatus, byProgress, byOwner, recent });
+    res.json({ total, byCategory, byStatus, byProgress, byOwner, bySupplier, byTopic, issueTotal, projectTotal, recent });
   } catch (e) { next(e); }
 });
 
@@ -1639,7 +1851,7 @@ function pickSupplier(body, { partial = false } = {}) {
     if (body[key] !== undefined) out[key] = String(body[key]).trim();
   }
   if (!partial && !out.name) {
-    const err = new Error('供应商名称不能为空');
+    const err = new Error('供应商不能为空');
     err.status = 400;
     throw err;
   }
@@ -1658,6 +1870,15 @@ app.get('/api/suppliers', (req, res) => {
     params.push(k, k, k, k, k, k, k, k, k, k, k);
   }
   if (materialType) { where.push('material_type = ?'); params.push(materialType); }
+  // 高级筛选：合作状态 / 评级 / 录入时间范围
+  const eq = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eq('status', req.query.status);
+  eq('rating', req.query.rating);
+  const range = dateRangeClause('created_at', req.query.dateFrom, req.query.dateTo);
+  if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
   // 第三层：按用户可见品类（物料品类）/ 供应商范围过滤
   const scope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'name', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -1670,7 +1891,7 @@ app.get('/api/suppliers', (req, res) => {
 app.post('/api/suppliers/batch', requirePermission('action:import'), batchInsertRoute('suppliers', SUPPLIER_WRITE_FIELDS, pickSupplier, 'name'));
 app.get('/api/suppliers/export', requirePermission('action:export'), exportRoute(
   'suppliers', '供应商信息',
-  ['供应商名称', '物料品类', '工厂地址', '公司简介', '产品类型', '产能(手机)', '模组客户', '终端客户',
+  ['供应商', '物料品类', '工厂地址', '公司简介', '产品类型', '产能(手机)', '模组客户', '终端客户',
    '体系能力', '自动化能力', '检验能力', '追溯能力', '测试能力', '返修', '优势', '劣势',
    '审核地址', '审核时间', '审核成员', '审核结果', 'QSA', 'QPA', '审核记录', '传音量产记录', '附件'],
   ['name', 'material_type', 'address', 'company_profile', 'product_type', 'capacity_phone', 'module_customers', 'terminal_customers',
@@ -1792,6 +2013,15 @@ app.get('/api/audits', (req, res) => {
   }
   if (result) { where.push('result = ?'); params.push(result); }
   if (materialType) { where.push('material_type = ?'); params.push(materialType); }
+  // 高级筛选：供应商 / 稽核人员 / 稽核日期范围
+  const eqAudit = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eqAudit('supplier', req.query.supplier);
+  eqAudit('auditor', req.query.auditor);
+  const range = dateRangeClause('audit_date', req.query.dateFrom, req.query.dateTo);
+  if (range.parts.length) { where.push(...range.parts); params.push(...range.params); }
   // 第三层：按用户可见品类（物料品类）/ 供应商范围过滤
   const scope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'supplier', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }
@@ -1863,6 +2093,19 @@ function countIssues(scope) {
   return s.split(/\r?\n/).filter((l) => l.trim()).length;
 }
 
+// 生成 [start, end] 之间的连续月份列表，如 2025-11 ~ 2026-02 → ['2025-11','2025-12','2026-01','2026-02']
+function monthRange(start, end) {
+  const out = [];
+  let [y, m] = start.split('-').map(Number);
+  const [endY, endM] = end.split('-').map(Number);
+  while (y < endY || (y === endY && m <= endM)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+
 app.get('/api/audits/stats', (req, res, next) => {
   try {
     const scope = scopeWhere(req, { categoryField: 'material_type', supplierField: 'supplier', allowAllWhenEmpty: true });
@@ -1902,27 +2145,51 @@ app.get('/api/audits/stats', (req, res, next) => {
       bySupplier.push(item);
     }
     bySupplier.sort((a, b) => b.count - a.count || b.issueCount - a.issueCount);
-    // 年度趋势：横轴=年，纵轴=问题个数，每个供应商一条曲线（取问题总量 TOP 6）
-    const trendMap = new Map();
+    // 问题个数趋势：横轴=年（年度）/ 月（月度），纵轴=问题个数，每个供应商一条曲线
+    // 两种粒度共用同一批供应商（问题总量 TOP 6），保证切换前后对比的是同一组对象
+    const trendPts = [];
+    const issuesBySupplier = new Map();
     for (const r of rows) {
-      if (!r.audit_date) continue;
-      const year = String(r.audit_date).slice(0, 4);
-      if (!/^\d{4}$/.test(year)) continue;
-      if (!trendMap.has(r.supplier)) trendMap.set(r.supplier, {});
-      const pts = trendMap.get(r.supplier);
-      pts[year] = (pts[year] || 0) + countIssues(r.scope);
+      // 兼容 2026-03-12 / 2026/3/12 / 2026.3.12 等日期写法
+      const ym = /^(\d{4})(?:[-/.年](\d{1,2}))?/.exec(String(r.audit_date || '').trim());
+      if (!ym) continue;
+      const mm = Number(ym[2]);
+      const issues = countIssues(r.scope);
+      issuesBySupplier.set(r.supplier, (issuesBySupplier.get(r.supplier) || 0) + issues);
+      trendPts.push({
+        supplier: r.supplier,
+        year: ym[1],
+        month: mm >= 1 && mm <= 12 ? `${ym[1]}-${String(mm).padStart(2, '0')}` : '',
+        issues,
+      });
     }
-    const yearSet = new Set();
-    for (const pts of trendMap.values()) Object.keys(pts).forEach((y) => yearSet.add(y));
-    const years = [...yearSet].sort();
-    const trendSeries = [...trendMap.entries()]
-      .map(([name, pts]) => ({ name, values: years.map((y) => pts[y] || 0) }))
-      .sort(
-        (a, b) =>
-          b.values.reduce((s, v) => s + v, 0) - a.values.reduce((s, v) => s + v, 0)
-      )
-      .slice(0, 6);
-    res.json({ total, byResult, recent, bySupplier, issueTrend: { years, series: trendSeries } });
+    const trendSuppliers = [...issuesBySupplier.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name]) => name);
+    const aggBy = (keyOf) => {
+      const agg = new Map();
+      for (const p of trendPts) {
+        const key = keyOf(p);
+        if (!key) continue;
+        if (!agg.has(p.supplier)) agg.set(p.supplier, {});
+        const pts = agg.get(p.supplier);
+        pts[key] = (pts[key] || 0) + p.issues;
+      }
+      return agg;
+    };
+    const seriesOf = (agg, labels) => trendSuppliers.map((name) => {
+      const pts = agg.get(name) || {};
+      return { name, values: labels.map((k) => pts[k] || 0) };
+    });
+    // 年度：只列出数据中出现过的年份
+    const years = [...new Set(trendPts.map((p) => p.year))].sort();
+    const issueTrend = { years, series: seriesOf(aggBy((p) => p.year), years) };
+    // 月度：按数据区间补齐连续月份（最多最近 36 个月），空月计 0，便于看走势
+    let months = [...new Set(trendPts.map((p) => p.month).filter(Boolean))].sort();
+    if (months.length) months = monthRange(months[0], months[months.length - 1]).slice(-36);
+    const issueTrendMonth = { months, series: seriesOf(aggBy((p) => p.month), months) };
+    res.json({ total, byResult, recent, bySupplier, issueTrend, issueTrendMonth });
   } catch (e) { next(e); }
 });
 
@@ -1951,6 +2218,13 @@ app.get('/api/qcps', (req, res) => {
   }
   if (status) { where.push('status = ?'); params.push(status); }
   if (category) { where.push('category = ?'); params.push(category); }
+  // 高级筛选：供应商 / 责任人
+  const eqQcp = (field, val) => {
+    const v = String(val === undefined || val === null ? '' : val).trim();
+    if (v) { where.push(`${field} = ?`); params.push(v); }
+  };
+  eqQcp('supplier', req.query.supplier);
+  eqQcp('responsible', req.query.responsible);
   // 第三层：按用户可见品类 / 供应商过滤
   const scope = scopeWhere(req, { categoryField: 'category', supplierField: 'supplier', allowAllWhenEmpty: true });
   if (scope.where) { where.push(scope.where.replace(/^ AND /, '')); params.push(...scope.params); }

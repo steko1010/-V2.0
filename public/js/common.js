@@ -71,6 +71,26 @@ async function renderSupplierDatalist(id) {
   el.innerHTML = names.map((s) => `<option value="${esc(s)}">`).join('');
 }
 
+// ---------- 列表高级筛选：下拉选项库 ----------
+// /api/meta 一次返回各列表筛选所需的全部选项（制造商 / 申请人 / 状态 / 责任人 / 流程 …），带 promise 缓存
+let metaAllPromise = null;
+function loadMetaAll() {
+  if (!metaAllPromise) {
+    metaAllPromise = apiGet('/api/meta').catch(() => ({}));
+  }
+  return metaAllPromise;
+}
+// 将 select 渲染为 meta 中某个字段的选项列表（用于列表页高级筛选下拉）
+// id：select 的 DOM id；key：meta 中的字段名；placeholder：空值选项文案
+async function renderMetaOptions(id, key, placeholder) {
+  const meta = await loadMetaAll();
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const list = (meta && meta[key]) || [];
+  sel.innerHTML = `<option value="">${esc(placeholder || '全部')}</option>`
+    + list.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+
 // ---------- Toast ----------
 let toastTimer = null;
 function toast(msg, type = 'info', duration = 2600) {

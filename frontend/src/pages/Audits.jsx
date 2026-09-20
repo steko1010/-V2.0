@@ -4,13 +4,12 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE } from '../components/ui/Pagination';
 import { ExportButton, ImportModal } from '../components/ui/ImportExport';
 import SupplierSelect from '../components/ui/SupplierSelect';
 import BarList from '../components/charts/BarList';
 import TrendChart from '../components/charts/TrendChart';
 
-const PAGE_SIZE = 10;
 const RESULTS = ['合格', '有条件合格', '不合格'];
 const EMPTY_FORM = { material_type: '', audit_date: '', supplier: '', auditor: '', scope: '', result: '合格' };
 // 批量导入模板列（中文列名 ↔ 后端字段，与 server.js AUDIT_FIELDS 对应）

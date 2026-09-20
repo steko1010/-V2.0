@@ -5,6 +5,15 @@ let state = {
   category: '',
   status: '',
   supplier: '',
+  manufacturer: '',
+  applied_by: '',
+  expiring: '',
+  rohs: '',
+  reach: '',
+  msds: '',
+  datasheet: '',
+  sortBy: '',
+  order: 'asc',
   total: 0,
   editingId: null,
   meta: { statuses: [], docStatuses: [], categories: [], suppliers: [] },
@@ -17,6 +26,14 @@ async function loadMeta() {
     fillSelect('filterCategory', state.meta.categories, '全部分类');
     fillSelect('filterSupplier', state.meta.suppliers, '全部供应商');
     fillSelect('f_status', state.meta.statuses);
+    // 资料状态（ROHS / REACH / MSDS / 规格书）
+    fillSelect('filterRohs', state.meta.docStatuses, 'ROHS 全部');
+    fillSelect('filterReach', state.meta.docStatuses, 'REACH 全部');
+    fillSelect('filterMsds', state.meta.docStatuses, 'MSDS 全部');
+    fillSelect('filterDatasheet', state.meta.docStatuses, '规格书 全部');
+    // 制造商 / 申请人：取自库中已有数据（按用户可见范围收敛）
+    renderMetaOptions('filterManufacturer', 'manufacturers', '全部制造商');
+    renderMetaOptions('filterAppliedBy', 'appliedBy', '全部申请人');
     const supList = document.getElementById('supList');
     supList.innerHTML = state.meta.suppliers.map((s) => `<option value="${esc(s)}">`).join('');
   } catch (e) {
@@ -38,6 +55,15 @@ async function loadMaterials() {
     category: state.category,
     status: state.status,
     supplier: state.supplier,
+    manufacturer: state.manufacturer,
+    applied_by: state.applied_by,
+    expiring: state.expiring,
+    rohs: state.rohs,
+    reach: state.reach,
+    msds: state.msds,
+    datasheet: state.datasheet,
+    sortBy: state.sortBy,
+    order: state.order,
   });
   try {
     const data = await apiGet('/api/materials?' + params.toString());
@@ -132,17 +158,32 @@ function applyFilters() {
   state.category = document.getElementById('filterCategory').value;
   state.status = document.getElementById('filterStatus').value;
   state.supplier = document.getElementById('filterSupplier').value;
+  state.manufacturer = document.getElementById('filterManufacturer').value;
+  state.applied_by = document.getElementById('filterAppliedBy').value;
+  state.expiring = document.getElementById('filterExpiring').value;
+  state.rohs = document.getElementById('filterRohs').value;
+  state.reach = document.getElementById('filterReach').value;
+  state.msds = document.getElementById('filterMsds').value;
+  state.datasheet = document.getElementById('filterDatasheet').value;
+  state.sortBy = document.getElementById('sortBy').value;
+  state.order = document.getElementById('sortOrder').value || 'asc';
   state.page = 1;
   loadMaterials();
 }
 
 function resetFilters() {
-  document.getElementById('keyword').value = '';
-  document.getElementById('filterCategory').value = '';
-  document.getElementById('filterStatus').value = '';
-  document.getElementById('filterSupplier').value = '';
-  state.keyword = state.category = state.status = state.supplier = '';
-  state.page = 1;
+  for (const id of ['keyword', 'filterCategory', 'filterStatus', 'filterSupplier',
+    'filterManufacturer', 'filterAppliedBy', 'filterExpiring',
+    'filterRohs', 'filterReach', 'filterMsds', 'filterDatasheet', 'sortBy']) {
+    document.getElementById(id).value = '';
+  }
+  document.getElementById('sortOrder').value = 'asc';
+  Object.assign(state, {
+    keyword: '', category: '', status: '', supplier: '',
+    manufacturer: '', applied_by: '', expiring: '',
+    rohs: '', reach: '', msds: '', datasheet: '',
+    sortBy: '', order: 'asc', page: 1,
+  });
   loadMaterials();
 }
 

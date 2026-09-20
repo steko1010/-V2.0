@@ -4,12 +4,11 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE } from '../components/ui/Pagination';
 import { ExportButton, ImportModal } from '../components/ui/ImportExport';
 import SupplierSelect from '../components/ui/SupplierSelect';
 import BarList from '../components/charts/BarList';
 
-const PAGE_SIZE = 10;
 const STATUSES = ['草稿', '生效', '作废'];
 const EMPTY_FORM = {
   category: '', name: '', supplier: '', process: '', control_item: '', spec: '',

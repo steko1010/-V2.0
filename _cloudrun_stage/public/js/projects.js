@@ -50,7 +50,6 @@ function switchTab(name) {
   if (name === 'manage') loadProjects();
   if (name === 'analysis') {
     loadStats();
-    loadPrestudyStats();
   }
 }
 
@@ -209,13 +208,31 @@ let pPages = 1;
 let pTotal = 0;
 const PAGE_SIZE = 10;
 
+// 读取当前筛选条件（关键词 / 品类 / 供应商 / 流程 / 来源 / 录入时间范围）
+function projectFilterParams() {
+  const params = new URLSearchParams();
+  const val = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value || '').trim() : '';
+  };
+  const set = (key, id) => { const v = val(id); if (v) params.set(key, v); };
+  set('keyword', 'pKeyword');
+  set('category', 'filterCategory');
+  set('supplier', 'filterSupplier');
+  set('flow', 'filterFlow');
+  set('source', 'filterSource');
+  set('dateFrom', 'filterDateFrom');
+  set('dateTo', 'filterDateTo');
+  return params;
+}
+
 async function loadProjects(targetPage) {
   const page = targetPage || pPage;
   if (page < 1 || (pPages > 0 && page > pPages)) return;
-  const keyword = document.getElementById('pKeyword').value.trim();
-  const qs = [`page=${page}`, `pageSize=${PAGE_SIZE}`];
-  if (keyword) qs.push('keyword=' + encodeURIComponent(keyword));
-  const data = await apiGet('/api/projects?' + qs.join('&'));
+  const params = projectFilterParams();
+  params.set('page', String(page));
+  params.set('pageSize', String(PAGE_SIZE));
+  const data = await apiGet('/api/projects?' + params.toString());
   projectItems = data.items || [];
   pTotal = data.total || 0;
   pPages = data.pages || 1;
@@ -273,16 +290,19 @@ function renderProjectPager() {
 }
 
 function resetProjects() {
-  document.getElementById('pKeyword').value = '';
+  for (const id of ['pKeyword', 'filterCategory', 'filterSupplier', 'filterFlow', 'filterSource', 'filterDateFrom', 'filterDateTo']) {
+    document.getElementById(id).value = '';
+  }
   loadProjects(1);
 }
 
 // 批量导出当前查询结果（按搜索条件过滤，导出全部匹配项）为 Excel
 async function exportProjects() {
   try {
-    const keyword = document.getElementById('pKeyword').value.trim();
-    const qs = keyword ? '?keyword=' + encodeURIComponent(keyword) : '';
-    const res = await fetch('/api/projects/export' + qs);
+    // 导出与列表保持同一套筛选条件
+    const params = projectFilterParams();
+    const qs = params.toString();
+    const res = await fetch('/api/projects/export' + (qs ? '?' + qs : ''));
     if (!res.ok) {
       let msg = '导出失败';
       try { const d = await res.json(); msg = d.message || msg; } catch (e) { /* ignore */ }
@@ -487,6 +507,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   // 项目品类下拉：数据源 = 品类管理中维护的物料中类
   await renderCategoryOptions('f_category', '请选择');
-  // 预加载列表（供供应商 datalist 使用）
+  // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
+  await renderSupplierDatalist('pSupList');
+  // 列表筛选下拉：品类 / 供应商 / 流程 / 来源
+  await renderCategoryOptions('filterCategory', '全部品类');
+  await Promise.all([
+    renderMetaOptions('filterSupplier', 'suppliers', '全部供应商'),
+    renderMetaOptions('filterFlow', 'projectFlows', '全部流程'),
+    renderMetaOptions('filterSource', 'projectSources', '全部来源'),
+  ]);
   loadProjects().catch(() => {});
 });

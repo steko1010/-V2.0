@@ -4,12 +4,11 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE, usePageSlice } from '../components/ui/Pagination';
 import { ExportButton, ImportModal } from '../components/ui/ImportExport';
 import SupplierSelect from '../components/ui/SupplierSelect';
 import BarList from '../components/charts/BarList';
 
-const PAGE_SIZE = 10;
 const EMPTY_FORM = {
   category: '', supplier: '', topic: '', risk: '', progress: '',
   milestone_lx: '', milestone_p1: '', milestone_p2: '', milestone_p3: '', status: '', owner: '',
@@ -242,7 +241,9 @@ export default function Prestudies() {
     });
   }, [riskAll, riskKw, riskCat, riskStatus, riskOwner]);
   const riskFilterActive = !!(riskKw.trim() || riskCat || riskStatus || riskOwner);
-  const riskIds = useMemo(() => riskFiltered.map((r) => r.id), [riskFiltered]);
+  // 在研项目清单：前端分页（每页 PAGE_SIZE 行），筛选条件变化时回到第 1 页
+  const riskPage = usePageSlice(riskFiltered, { resetKeys: [riskKw, riskCat, riskStatus, riskOwner] });
+  const riskIds = useMemo(() => riskPage.pageItems.map((r) => r.id), [riskPage.pageItems]);
   const riskAllChecked = riskIds.length > 0 && riskIds.every((id) => checked.has(id));
   const toggleAllRisk = () => {
     const next = new Set(checked);
@@ -352,7 +353,7 @@ export default function Prestudies() {
               <table className="data-table" style={(riskFiltered.length || riskLoading) ? undefined : { display: 'none' }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 36 }}><input type="checkbox" checked={riskAllChecked} onChange={toggleAllRisk} title="全选" /></th>
+                    <th style={{ width: 36 }}><input type="checkbox" checked={riskAllChecked} onChange={toggleAllRisk} title="全选本页" /></th>
                     <th>序号</th><th>物料品类</th><th>供应商</th><th>项目名称</th><th>立项</th><th>P1</th><th>P2</th><th>P3</th><th>风险</th><th>进度措施</th><th>状态</th><th>责任人</th><th>操作</th>
                   </tr>
                 </thead>
@@ -360,10 +361,10 @@ export default function Prestudies() {
                   {riskLoading && !riskFiltered.length && (
                     <tr><td colSpan={14}>风险数据加载中...</td></tr>
                   )}
-                  {riskFiltered.map((r, i) => (
+                  {riskPage.pageItems.map((r, i) => (
                     <tr key={r.id}>
                       <td><input type="checkbox" checked={checked.has(r.id)} onChange={() => toggleOne(r.id)} /></td>
-                      <td>{i + 1}</td>
+                      <td>{riskPage.offset + i + 1}</td>
                       <td><PreBadge cat={r.category} /></td>
                       <td>{r.supplier || '-'}</td>
                       <td><b>{r.topic}</b></td>
@@ -392,6 +393,7 @@ export default function Prestudies() {
                 </div>
               )}
             </div>
+            <Pagination page={riskPage.page} total={riskPage.total} pageSize={PAGE_SIZE} onGo={riskPage.setPage} />
           </div>
         </section>
       )}

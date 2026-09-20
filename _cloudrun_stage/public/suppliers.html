@@ -61,6 +61,10 @@
             <option value="">全部物料品类</option>
           </select>
           <input type="text" id="keyword" class="search-input" placeholder="搜索名称 / 品类 / 产品类型 / 客户...">
+          <select id="filterStatus"><option value="">全部合作状态</option></select>
+          <select id="filterRating"><option value="">全部评级</option></select>
+          <input type="date" id="filterDateFrom" title="录入时间起">
+          <input type="date" id="filterDateTo" title="录入时间止">
           <button class="btn" onclick="loadSuppliers()">查询</button>
           <button class="btn" onclick="resetSuppliers()">重置</button>
         </div>
@@ -69,7 +73,7 @@
             <thead>
               <tr>
                 <th style="width:36px"><input type="checkbox" id="supCheckAll" onclick="toggleSupAll(this)" title="全选本页"></th>
-                <th>供应商名称</th>
+                <th>供应商</th>
                 <th>物料品类</th>
                 <th>工厂地址</th>
                 <th>公司简介</th>
@@ -133,7 +137,7 @@
       <div class="form-grid">
         <div class="form-section">基本信息</div>
         <div class="form-item half">
-          <label>供应商名称<span class="req">*</span></label>
+          <label>供应商<span class="req">*</span></label>
           <input id="f_name" placeholder="必填">
         </div>
         <div class="form-item half">

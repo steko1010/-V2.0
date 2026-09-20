@@ -52,6 +52,12 @@
           </div>
           <div class="toolbar">
             <input type="text" id="pKeyword" class="search-input" placeholder="搜索物料品类 / 供应商 / 专项名称 / 风险 / 立项 / P1 / P2 / P3 / 状态 / 责任人">
+            <select id="filterCategory"><option value="">全部品类</option></select>
+            <select id="filterSupplier"><option value="">全部供应商</option></select>
+            <select id="filterStatus"><option value="">全部状态</option></select>
+            <select id="filterOwner"><option value="">全部责任人</option></select>
+            <input type="date" id="filterDateFrom" title="录入时间起">
+            <input type="date" id="filterDateTo" title="录入时间止">
             <button class="btn" onclick="loadPrestudies(1)">查询</button>
             <button class="btn" onclick="resetPrestudies()">重置</button>
           </div>

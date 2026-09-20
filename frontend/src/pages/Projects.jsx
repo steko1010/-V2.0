@@ -4,12 +4,11 @@ import { useAuth } from '../stores/auth';
 import { useMeta } from '../stores/meta';
 import { confirmDialog, toast } from '../stores/ui';
 import Modal from '../components/ui/Modal';
-import Pagination from '../components/ui/Pagination';
+import Pagination, { PAGE_SIZE } from '../components/ui/Pagination';
 import { ExportButton } from '../components/ui/ImportExport';
 import SupplierSelect from '../components/ui/SupplierSelect';
 import BarList from '../components/charts/BarList';
 
-const PAGE_SIZE = 10;
 const ACCENT_CLS = ['accent-blue', 'accent-green', 'accent-amber', 'accent-red'];
 
 // 项目规格字段：[中文列名, 数据库字段, 弹窗分组]（顺序即列表/模板列顺序）

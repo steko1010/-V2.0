@@ -41,6 +41,16 @@ async function loadAudits(page) {
   if (keyword) params.set('keyword', keyword);
   if (result) params.set('result', result);
   if (materialType) params.set('materialType', materialType);
+  // 高级筛选：供应商 / 稽核人员 / 稽核日期范围
+  const setParam = (key, id) => {
+    const el = document.getElementById(id);
+    const v = el ? String(el.value || '').trim() : '';
+    if (v) params.set(key, v);
+  };
+  setParam('supplier', 'filterSupplier');
+  setParam('auditor', 'filterAuditor');
+  setParam('dateFrom', 'filterDateFrom');
+  setParam('dateTo', 'filterDateTo');
   const data = await apiGet('/api/audits?' + params.toString());
   auditItems = data.items || [];
   auditPage = data.page;
@@ -85,21 +95,14 @@ function renderAudits() {
         </td>
       </tr>`)
     .join('');
-  const sups = [...new Set(auditItems.map((a) => a.supplier).filter(Boolean))];
-  const supList = document.getElementById('supList');
-  if (supList) {
-    supList.innerHTML = sups
-      .map((s) => `<option value="${esc(s)}">`)
-      .join('');
-  }
   const allCb = document.getElementById('auditCheckAll');
   if (allCb) allCb.checked = false;
 }
 
 function resetAudits() {
-  document.getElementById('keyword').value = '';
-  document.getElementById('filterResult').value = '';
-  document.getElementById('filterMaterialType').value = '';
+  for (const id of ['keyword', 'filterResult', 'filterMaterialType', 'filterSupplier', 'filterAuditor', 'filterDateFrom', 'filterDateTo']) {
+    document.getElementById(id).value = '';
+  }
   loadAudits(1);
 }
 
@@ -294,6 +297,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   await renderCategoryOptions('filterMaterialType', '全部物料品类');
   await renderCategoryOptions('f_material_type', '请选择');
+  // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
+  await renderSupplierDatalist('supList');
+  // 列表筛选下拉：供应商 / 稽核人员
+  await Promise.all([
+    renderMetaOptions('filterSupplier', 'suppliers', '全部供应商'),
+    renderMetaOptions('filterAuditor', 'auditors', '全部稽核人员'),
+  ]);
   loadAudits();
   loadStats();
 });

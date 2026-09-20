@@ -41,6 +41,14 @@ async function loadQcps(page) {
   if (keyword) params.set('keyword', keyword);
   if (status) params.set('status', status);
   if (activeCategory) params.set('category', activeCategory);
+  // 高级筛选：供应商 / 责任人
+  const setParam = (key, id) => {
+    const el = document.getElementById(id);
+    const v = el ? String(el.value || '').trim() : '';
+    if (v) params.set(key, v);
+  };
+  setParam('supplier', 'filterSupplier');
+  setParam('responsible', 'filterResponsible');
   const data = await apiGet('/api/qcps?' + params.toString());
   qcpItems = data.items || [];
   qcpPage = data.page;
@@ -139,8 +147,9 @@ async function loadDir(force) {
 }
 
 function resetQcps() {
-  document.getElementById('keyword').value = '';
-  document.getElementById('filterStatus').value = '';
+  for (const id of ['keyword', 'filterStatus', 'filterSupplier', 'filterResponsible']) {
+    document.getElementById(id).value = '';
+  }
   activeCategory = '';
   renderDir();
   loadQcps(1);
@@ -302,6 +311,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   await renderCategoryOptions('f_category', '请选择');
   // 供应商输入框候选值：数据源 = 供应商信息中维护的供应商
   await renderSupplierDatalist('supList');
+  // 列表筛选下拉：供应商 / 责任人
+  await Promise.all([
+    renderMetaOptions('filterSupplier', 'qcpSuppliers', '全部供应商'),
+    renderMetaOptions('filterResponsible', 'qcpResponsibles', '全部责任人'),
+  ]);
   loadQcps();
   loadStats();
 });
